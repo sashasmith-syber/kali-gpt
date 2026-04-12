@@ -1,0 +1,20 @@
+{
+  "success": false,
+  "results": {
+    "Health Endpoint": "FAILED",
+    "NET REAPER Health": "FAILED",
+    "Profile Switching": "PASSED",
+    "IP Blocking": "PASSED",
+    "Threat Processing": "PASSED",
+    "Tools Endpoint": "PASSED",
+    "Security Headers": "PASSED",
+    "Error Handling": "ERROR: <urlopen error [WinError 10061] No connection could be made because the target machine actively refused it>",
+    "Frontend Files": "PASSED",
+    "CORS Configuration": "PASSED",
+    "Rate Limiting": "PASSED",
+    "Environment Lock": "PASSED"
+  },
+  "timestamp": "2026-04-12T09:26:10.464113",
+  "tests_passed": 9,
+  "tests_total": 11
+}

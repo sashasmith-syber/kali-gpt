@@ -1,0 +1,139 @@
+{
+  "system": {
+    "name": "KALI-GPT",
+    "version": "2.0.0",
+    "mode": "OFFENSIVE_SECURITY",
+    "owner": "sashasmith-syber",
+    "authorization": "AUTHORISED",
+    "deployment_date": "2026-03-07T17:14:46.847714",
+    "critical_path_status": "PASSED"
+  },
+  "security": {
+    "profile": "AGGRESSIVE",
+    "response_mode": "ACTIVE_DEFENSE",
+    "threat_thresholds": {
+      "critical": 4,
+      "high": 6,
+      "medium": 7,
+      "low": 9
+    },
+    "capabilities": {
+      "ip_blocking": {
+        "enabled": true,
+        "duration_seconds": 7200,
+        "method": "iptables"
+      },
+      "counter_reconnaissance": {
+        "enabled": true,
+        "scan_type": "stealth_syn",
+        "timing_template": "T2",
+        "target_ports": [22, 80, 443, 3389, 5900]
+      },
+      "tarpit": {
+        "enabled": true,
+        "service": "endlessh",
+        "port": 22,
+        "mode": "aggressive",
+        "max_clients": 100
+      },
+      "auto_response": {
+        "enabled": true,
+        "trigger_threshold": 6
+      }
+    },
+    "logging": {
+      "level": "INFO",
+      "audit_trail": true,
+      "command_logging": true
+    }
+  },
+  "net_reaper": {
+    "module": "NET REAPER",
+    "owner": "sashasmith-syber",
+    "profiles": {
+      "passive": {
+        "threshold": 10,
+        "block_duration": 0,
+        "counter_scan": false,
+        "tarpit": false
+      },
+      "defensive": {
+        "threshold": 8,
+        "block_duration": 3600,
+        "counter_scan": false,
+        "tarpit": true
+      },
+      "aggressive": {
+        "threshold": 6,
+        "block_duration": 7200,
+        "counter_scan": true,
+        "tarpit": true
+      },
+      "scorched_earth": {
+        "threshold": 4,
+        "block_duration": 86400,
+        "counter_scan": true,
+        "tarpit": true
+      }
+    },
+    "current_profile": "aggressive"
+  },
+  "docker": {
+    "services": {
+      "backend": {
+        "container_name": "kaligpt-backend",
+        "port": 8000,
+        "environment": {
+          "PYTHONUNBUFFERED": "1",
+          "LLM_PROVIDER": "ollama",
+          "OLLAMA_HOST": "http://ollama:11434",
+          "LLM_MODEL": "llama3:latest"
+        }
+      },
+      "frontend": {
+        "container_name": "kaligpt-frontend",
+        "port": 5173,
+        "environment": {
+          "VITE_API_BASE_URL": "http://localhost:8000"
+        }
+      },
+      "ollama": {
+        "container_name": "kaligpt-ollama",
+        "port": 11434,
+        "image": "ollama/ollama"
+      }
+    },
+    "network": "kaligpt-network"
+  },
+  "api_endpoints": {
+    "health": "/health",
+    "chat": "/api/chat",
+    "execute": "/api/execute",
+    "tools": "/api/tools",
+    "net_reaper": {
+      "health": "/net-reaper/health",
+      "profile": "/net-reaper/profile",
+      "switch_profile": "/net-reaper/api/profile",
+      "block_ip": "/net-reaper/api/block",
+      "unblock_ip": "/net-reaper/api/unblock",
+      "scan_ip": "/net-reaper/api/scan",
+      "blocked_ips": "/net-reaper/blocked",
+      "process_threat": "/net-reaper/api/threat"
+    }
+  },
+  "attack_response": {
+    "yesterday_attack_context": "Immediate offensive security duty activated",
+    "response_actions": [
+      "Lowered threat thresholds to 6 (from 8)",
+      "Enabled counter-reconnaissance scanning",
+      "Activated SSH tarpit on port 22",
+      "IP blocking with 2-hour duration",
+      "Real-time threat processing"
+    ],
+    "monitoring": {
+      "active": true,
+      "auto_block": true,
+      "counter_scan": true
+    }
+  }
+}

@@ -1,0 +1,57 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: kaligpt-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - PYTHONUNBUFFERED=1
+      - LLM_PROVIDER=ollama
+      - OLLAMA_HOST=http://ollama:11434
+      - LLM_MODEL=llama3:latest
+    networks:
+      - kaligpt-network
+    depends_on:
+      - ollama
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./backend/frontend
+      dockerfile: Dockerfile
+    container_name: kaligpt-frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./backend/frontend:/app
+      - /app/node_modules
+    environment:
+      - VITE_API_BASE_URL=http://localhost:8000
+    depends_on:
+      - backend
+    networks:
+      - kaligpt-network
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama
+    container_name: kaligpt-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - llm-data:/root/.ollama
+    networks:
+      - kaligpt-network
+    restart: unless-stopped
+
+networks:
+  kaligpt-network:
+    driver: bridge
+
+volumes:
+  llm-data:

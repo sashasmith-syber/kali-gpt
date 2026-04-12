@@ -1,0 +1,174 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Tokyo Noir Theme */
+    --background: 0 0% 4%;
+    --foreground: 0 0% 98%;
+    --card: 0 0% 6%;
+    --card-foreground: 0 0% 98%;
+    --popover: 0 0% 6%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 100 100% 55%;
+    --primary-foreground: 0 0% 4%;
+    --secondary: 0 0% 12%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 0 0% 15%;
+    --muted-foreground: 0 0% 65%;
+    --accent: 100 100% 55%;
+    --accent-foreground: 0 0% 4%;
+    --destructive: 348 100% 50%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 18%;
+    --input: 0 0% 18%;
+    --ring: 100 100% 55%;
+    --radius: 0.5rem;
+    --sidebar-background: 0 0% 8%;
+    --sidebar-foreground: 0 0% 98%;
+    --sidebar-primary: 100 100% 55%;
+    --sidebar-primary-foreground: 0 0% 4%;
+    --sidebar-accent: 0 0% 15%;
+    --sidebar-accent-foreground: 0 0% 98%;
+    --sidebar-border: 0 0% 18%;
+    --sidebar-ring: 100 100% 55%;
+    
+    /* Custom colors */
+    --acid-green: 100 100% 55%;
+    --reaper-red: 348 100% 50%;
+    --reaper-orange: 24 100% 50%;
+    --cyber-blue: 200 100% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  
+  html {
+    scroll-behavior: smooth;
+  }
+  
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background-color: hsl(0 0% 4%);
+  }
+  
+  ::selection {
+    background-color: hsl(var(--acid-green) / 0.3);
+    color: hsl(var(--foreground));
+  }
+}
+
+@layer components {
+  .glass-panel {
+    @apply bg-card/80 backdrop-blur-md border border-border/50;
+    box-shadow: 
+      0 0 0 1px hsl(var(--border) / 0.5),
+      0 4px 6px -1px rgb(0 0 0 / 0.3),
+      0 2px 4px -2px rgb(0 0 0 / 0.2);
+  }
+  
+  .cyber-glow {
+    box-shadow: 
+      0 0 20px hsl(var(--acid-green) / 0.3),
+      0 0 40px hsl(var(--acid-green) / 0.1);
+  }
+  
+  .threat-pulse {
+    animation: threat-pulse 2s ease-in-out infinite;
+  }
+  
+  .status-indicator {
+    @apply w-2 h-2 rounded-full;
+  }
+  
+  .status-live {
+    @apply bg-[hsl(100,100%,55%)];
+    box-shadow: 0 0 10px hsl(100 100% 55% / 0.8);
+    animation: pulse-live 1.5s ease-in-out infinite;
+  }
+  
+  .status-warning {
+    @apply bg-[hsl(48,100%,50%)];
+    box-shadow: 0 0 10px hsl(48 100% 50% / 0.8);
+  }
+  
+  .status-danger {
+    @apply bg-[hsl(348,100%,50%)];
+    box-shadow: 0 0 10px hsl(348 100% 50% / 0.8);
+    animation: pulse-danger 1s ease-in-out infinite;
+  }
+}
+
+@layer utilities {
+  .text-acid {
+    color: hsl(100 100% 55%);
+  }
+  
+  .text-reaper {
+    color: hsl(348 100% 50%);
+  }
+  
+  .bg-acid {
+    background-color: hsl(100 100% 55%);
+  }
+  
+  .bg-reaper {
+    background-color: hsl(348 100% 50%);
+  }
+  
+  .border-acid {
+    border-color: hsl(100 100% 55%);
+  }
+  
+  .glow-acid {
+    box-shadow: 0 0 20px hsl(100 100% 55% / 0.5);
+  }
+  
+  .glow-reaper {
+    box-shadow: 0 0 20px hsl(348 100% 50% / 0.5);
+  }
+}
+
+@keyframes threat-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(1.05); }
+}
+
+@keyframes pulse-live {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes pulse-danger {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(1.2); }
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: hsl(0 0% 8%);
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(0 0% 25%);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(100 100% 55% / 0.5);
+}
+
+/* Monospace for code/logs */
+.font-mono {
+  font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', Consolas, monospace;
+}

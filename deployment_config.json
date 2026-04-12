@@ -1,0 +1,60 @@
+{
+  "deployment": {
+    "status": "CONFIGURED",
+    "mode": "OFFENSIVE_SECURITY",
+    "timestamp": "2026-03-07T17:14:46.847714",
+    "authorization": "AUTHORISED",
+    "owner": "sashasmith-syber",
+    "docker": {
+      "required": true,
+      "status": "NOT_RUNNING",
+      "action_required": "Start Docker Desktop"
+    }
+  },
+  "security_profile": {
+    "profile": "AGGRESSIVE",
+    "threshold": 6,
+    "block_duration": 7200,
+    "counter_scan": true,
+    "tarpit": true,
+    "description": "Block + scan back (threshold 6+)"
+  },
+  "threat_thresholds": {
+    "critical": 4,
+    "high": 6,
+    "medium": 7,
+    "low": 9
+  },
+  "capabilities": {
+    "ip_blocking": true,
+    "counter_reconnaissance": true,
+    "tarpit_honeypot": true,
+    "auto_response": true,
+    "profile_switching": true,
+    "iptables_integration": true,
+    "nmap_scanning": true
+  },
+  "services": {
+    "backend": {
+      "port": 8000,
+      "status": "PENDING",
+      "health_endpoint": "/health",
+      "net_reaper_endpoint": "/net-reaper/health"
+    },
+    "frontend": {
+      "port": 5173,
+      "status": "PENDING"
+    },
+    "ollama": {
+      "port": 11434,
+      "status": "PENDING",
+      "model": "llama3:latest"
+    }
+  },
+  "operational_notes": [
+    "System will auto-block threats at risk level 6+",
+    "Counter-scans will be performed on blocked IPs",
+    "Tarpit active on port 22 (if endlessh running)",
+    "All actions logged to security audit trail"
+  ]
+}

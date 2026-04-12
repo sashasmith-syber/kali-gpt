@@ -1,0 +1,9 @@
+c:\Users\brand\Documents\Downloads\cloudflared-windows-amd64.msi{
+  "mcpServers": {
+    "github.com/VapiAI/mcp-server": {
+      "command": "npx",
+      "args": ["-y", "@vapi-ai/mcp-server"],
+      "env": {}
+    }
+  }
+}
