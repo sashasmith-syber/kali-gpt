@@ -353,16 +353,46 @@ async def verify_api_key_header(x_api_key: Optional[str] = Header(None)) -> Opti
 
 
 def init_default_admin():
-    """Initialize default admin user"""
+    """Initialize default admin user with secure random password"""
     if "admin" not in users_db:
+        # Generate secure random password
+        import secrets
+        import string
+        
+        # Generate a 16-character secure password
+        alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
+        default_password = ''.join(secrets.choice(alphabet) for _ in range(16))
+        
         admin_user = UserInDB(
             username="admin",
             email="admin@kaligpt.local",
             full_name="Administrator",
-            hashed_password=PasswordHasher.hash_password("Admin@123"),
+            hashed_password=PasswordHasher.hash_password(default_password),
             role="admin",
-            disabled=False
+            disabled=False,
+            # Track that password needs to be changed
+            metadata={"password_change_required": True}
         )
         users_db["admin"] = admin_user
-        logger.info("Default admin user created: admin / Admin@123")
-        logger.warning("⚠️  CHANGE DEFAULT ADMIN PASSWORD IMMEDIATELY!")
+        
+        # Log the password securely - only show once at startup
+        logger.critical("=" * 70)
+        logger.critical("DEFAULT ADMIN USER CREATED - SECURE THIS IMMEDIATELY")
+        logger.critical("=" * 70)
+        logger.critical(f"Username: admin")
+        logger.critical(f"Password: {default_password}")
+        logger.critical("=" * 70)
+        logger.critical("⚠️  ACTION REQUIRED: Change this password after first login!")
+        logger.critical("⚠️  This password will NOT be shown again!")
+        logger.critical("=" * 70)
+        
+        # Also print to console for visibility
+        print("\n" + "=" * 70)
+        print("DEFAULT ADMIN USER CREATED - SECURE THIS IMMEDIATELY")
+        print("=" * 70)
+        print(f"Username: admin")
+        print(f"Password: {default_password}")
+        print("=" * 70)
+        print("⚠️  ACTION REQUIRED: Change this password after first login!")
+        print("⚠️  This password will NOT be shown again!")
+        print("=" * 70 + "\n")

@@ -14,7 +14,57 @@ import hashlib
 import psutil
 
 APP_VERSION = "1.0.0"
-AGENT_TOKEN = os.getenv("DESKTOP_DEFENDER_AGENT_TOKEN", "change-me-local-token")
+
+# Generate or load secure agent token
+def get_agent_token():
+    """Get or generate secure agent token"""
+    # First, check environment variable
+    env_token = os.getenv("DESKTOP_DEFENDER_AGENT_TOKEN")
+    if env_token:
+        return env_token
+    
+    # Check for existing token file
+    token_file = os.path.expanduser("~/.desktop-defender-agent-token")
+    if os.path.exists(token_file):
+        with open(token_file, "r") as f:
+            return f.read().strip()
+    
+    # Generate new secure token
+    new_token = f"dd_{secrets.token_urlsafe(32)}"
+    
+    # Save to file with restricted permissions
+    try:
+        with open(token_file, "w") as f:
+            f.write(new_token)
+        # Set restrictive permissions (owner read/write only)
+        os.chmod(token_file, 0o600)
+    except Exception as e:
+        logger.warning(f"Could not save token to file: {e}")
+    
+    # Log the token securely - only show once at startup
+    print("\n" + "=" * 70)
+    print("DESKTOP DEFENDER AGENT TOKEN GENERATED - SECURE THIS IMMEDIATELY")
+    print("=" * 70)
+    print(f"Token: {new_token}")
+    print(f"Token file: {token_file}")
+    print("=" * 70)
+    print("⚠️  ACTION REQUIRED: Save this token in your environment or client configuration!")
+    print("⚠️  This token will NOT be shown again!")
+    print("=" * 70 + "\n")
+    
+    logger.critical("=" * 70)
+    logger.critical("DESKTOP DEFENDER AGENT TOKEN GENERATED - SECURE THIS IMMEDIATELY")
+    logger.critical("=" * 70)
+    logger.critical(f"Token: {new_token}")
+    logger.critical(f"Token file: {token_file}")
+    logger.critical("=" * 70)
+    logger.critical("⚠️  ACTION REQUIRED: Save this token in your environment or client configuration!")
+    logger.critical("⚠️  This token will NOT be shown again!")
+    logger.critical("=" * 70)
+    
+    return new_token
+
+AGENT_TOKEN = get_agent_token()
 
 app = FastAPI(title="Desktop Defender Agent", version=APP_VERSION)
 

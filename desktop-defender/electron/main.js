@@ -5,10 +5,22 @@ const Store = require("electron-store");
 const store = new Store({
   name: "desktop-defender-config",
   defaults: {
-    agentBaseUrl: "http://127.0.0.1:8787",
-    agentToken: "change-me-local-token"
+    agentBaseUrl: "http://127.0.0.1:8787"
+    // Note: No default agentToken - user must configure this securely
   }
 });
+
+// Security warning if token not configured
+function checkSecurityConfig() {
+  const token = store.get("agentToken");
+  if (!token) {
+    console.warn("⚠️  SECURITY WARNING: Agent token not configured!");
+    console.warn("⚠️  Please configure a secure token before using Desktop Defender.");
+    console.warn("⚠️  The agent token can be found in the agent startup logs or ~/.desktop-defender-agent-token");
+    return false;
+  }
+  return true;
+}
 
 function createWindow() {
   const win = new BrowserWindow({

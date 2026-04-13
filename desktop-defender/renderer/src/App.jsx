@@ -16,8 +16,9 @@ const DEFAULT_POLICIES = {
 function App() {
   const [config, setConfig] = useState({
     agentBaseUrl: "http://127.0.0.1:8787",
-    agentToken: "change-me-local-token"
+    agentToken: "" // No default token - must be configured securely
   });
+  const [securityWarning, setSecurityWarning] = useState("");
   const [health, setHealth] = useState({ status: "unknown" });
   const [incidents, setIncidents] = useState([]);
   const [policies, setPolicies] = useState(DEFAULT_POLICIES);
@@ -38,6 +39,12 @@ function App() {
       if (window.desktopDefender?.getConfig) {
         const saved = await window.desktopDefender.getConfig();
         setConfig(saved);
+        // Check if token is configured
+        if (!saved.agentToken) {
+          setSecurityWarning("⚠️ Security Warning: Agent token not configured. Please set a secure token to connect to the agent.");
+        } else {
+          setSecurityWarning("");
+        }
       }
     })();
   }, []);
@@ -95,6 +102,15 @@ function App() {
     <div className="layout">
       <h1>Desktop Defender</h1>
       <p className="author">Author: sashasmith-syber</p>
+      
+      {securityWarning && (
+        <section className="card" style={{backgroundColor: '#fff3cd', border: '1px solid #ffc107', color: '#856404'}}>
+          <p style={{margin: 0, fontWeight: 'bold'}}>{securityWarning}</p>
+          <p style={{margin: '8px 0 0 0', fontSize: '0.9em'}}>
+            The agent token can be found in the agent startup logs or ~/.desktop-defender-agent-token
+          </p>
+        </section>
+      )}
 
       <section className="card">
         <h2>Agent Connection</h2>
