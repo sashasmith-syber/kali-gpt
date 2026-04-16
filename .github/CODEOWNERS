@@ -1,0 +1,39 @@
+# CODEOWNERS — Hardened code ownership mapping
+# Docs: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+#
+# Rules:
+# - Each line: <pattern> <one or more owners>
+# - Last matching rule wins
+# - All PRs touching listed paths REQUIRE approval from owner(s)
+# - Integrate with branch protection: Settings > Branches > Require review from Code Owners
+
+# ── Global fallback (anything not listed below) ────────────────────────────
+*                               @sashasmith-syber
+
+# ── CI/CD & security configuration (highest sensitivity) ──────────────────
+.github/                        @sashasmith-syber
+.github/workflows/              @sashasmith-syber
+.github/dependabot.yml          @sashasmith-syber
+SECURITY.md                     @sashasmith-syber
+
+# ── Backend — authentication, JWT, rate-limiting ──────────────────────────
+backend/auth.py                 @sashasmith-syber
+backend/security.py             @sashasmith-syber
+backend/rate_limit.py           @sashasmith-syber
+backend/main.py                 @sashasmith-syber
+backend/requirements.txt        @sashasmith-syber
+
+# ── Desktop Electron app (IPC, renderer isolation) ────────────────────────
+desktop-defender/electron/      @sashasmith-syber
+desktop-defender/package.json   @sashasmith-syber
+
+# ── Dependency manifests — any manifest change requires security review ───
+**/package.json                 @sashasmith-syber
+**/package-lock.json            @sashasmith-syber
+**/requirements*.txt            @sashasmith-syber
+**/Dockerfile                   @sashasmith-syber
+docker-compose.yml              @sashasmith-syber
+
+# ── Docs ──────────────────────────────────────────────────────────────────
+docs/                           @sashasmith-syber
+*.md                            @sashasmith-syber
