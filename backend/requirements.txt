@@ -1,13 +1,26 @@
-fastapi==0.109.0
-uvicorn[standard]==0.27.0
-pydantic==2.5.3
-pydantic[email]==2.5.3
-python-multipart==0.0.6
+# ── Core framework ────────────────────────────────────────────────────────────
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+pydantic==2.10.3
+pydantic[email]==2.10.3
 
-# Security dependencies
-python-jose[cryptography]==3.3.0
+# ── File upload handling ───────────────────────────────────────────────────────
+# python-multipart 0.0.6 had 3 HIGH CVEs (ReDoS, DoS, Arbitrary Write)
+# Fixed in 0.0.20+
+python-multipart==0.0.20
+
+# ── Security dependencies ──────────────────────────────────────────────────────
+# python-jose 3.3.0 had CRITICAL algorithm confusion CVE with ECDSA keys
+# Replaced with PyJWT (actively maintained, no known CRITICAL CVEs)
+PyJWT[crypto]==2.9.0
+cryptography==43.0.3       # explicit pin to prevent transitive downgrade attacks
+
+# passlib[bcrypt] 1.7.4 is EOL; bcrypt is still fine as standalone
 passlib[bcrypt]==1.7.4
+bcrypt==4.2.1               # pin to avoid downgrade to vulnerable <4.x
+
+# Rate limiting
 slowapi==0.1.9
 
-# Additional utilities
-python-dotenv==1.0.0
+# ── Utilities ─────────────────────────────────────────────────────────────────
+python-dotenv==1.0.1
