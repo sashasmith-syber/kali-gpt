@@ -33,21 +33,15 @@
 
 ```
 kali-gpt/
-├── frontend/                          # React TypeScript frontend
-│   ├── src/
-│   │   ├── kali-gpt-claude.tsx       # Main component (500+ lines)
-│   │   ├── main.tsx                   # Entry point
-│   │   └── index.css                  # Global styles
-│   ├── index.html                     # HTML template
-│   ├── package.json                   # Dependencies
-│   ├── tsconfig.json                  # TypeScript config
-│   ├── vite.config.ts                 # Vite config
-│   └── Dockerfile                     # Frontend container
-│
 ├── backend/                           # FastAPI backend
 │   ├── main.py                        # API server (600+ lines)
 │   ├── requirements.txt               # Python dependencies
-│   └── Dockerfile                     # Backend container (Kali-based)
+│   ├── Dockerfile                     # Backend container (Kali-based)
+│   └── frontend/                      # React TypeScript frontend
+│       ├── src/
+│       ├── package.json
+│       ├── vite.config.ts
+│       └── Dockerfile
 │
 ├── docker-compose.yml                 # Container orchestration
 ├── .gitignore                         # Git ignore rules
@@ -252,7 +246,7 @@ pip install -r requirements.txt
 python3 main.py
 
 # Frontend
-cd frontend && npm install
+cd backend/frontend && npm install
 npm run dev
 ```
 

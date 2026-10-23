@@ -111,7 +111,7 @@ python3 main.py
 
 1. **Navigate to frontend directory**
 ```bash
-cd kali-gpt/frontend
+cd kali-gpt/backend/frontend
 ```
 
 2. **Install dependencies**
@@ -219,20 +219,16 @@ Explain SQL injection and show me how to test for it
 
 ```
 kali-gpt/
-├── frontend/                 # React + TypeScript frontend
-│   ├── src/
-│   │   ├── kali-gpt-claude.tsx  # Main component
-│   │   ├── main.tsx             # Entry point
-│   │   └── index.css            # Styles
-│   ├── package.json
-│   ├── tsconfig.json
-│   ├── vite.config.ts
-│   └── Dockerfile
 ├── backend/                  # FastAPI backend
 │   ├── main.py              # API server
 │   ├── llm.py               # NEW: Local LLM integration
 │   ├── requirements.txt
-│   └── Dockerfile
+│   ├── Dockerfile
+│   └── frontend/             # React + TypeScript frontend
+│       ├── src/
+│       ├── package.json
+│       ├── vite.config.ts
+│       └── Dockerfile
 ├── docker-compose.yml       # Container orchestration
 └── README.md
 ```
@@ -250,7 +246,7 @@ sudo netstat -tulpn | grep 8000
 python3 --version
 
 # Reinstall dependencies
-pip install -r requirements.txt --force-reinstall
+pip install -r backend/requirements.txt --force-reinstall
 ```
 
 **Problem**: LLM not responding
@@ -263,7 +259,7 @@ pip install -r requirements.txt --force-reinstall
 **Problem**: Frontend won't start
 ```bash
 # Clear node modules and reinstall
-rm -rf node_modules package-lock.json
+cd backend/frontend
 npm install
 
 # Check Node version

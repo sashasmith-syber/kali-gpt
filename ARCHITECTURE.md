@@ -306,8 +306,8 @@ Return Result
 ```
 Host                          Container
 ────────────────────────────────────────────────
-./frontend/src         →     /app/src
-./frontend/package.json →    /app/package.json
+./backend/frontend/src         →     /app/src
+./backend/frontend/package.json →    /app/package.json
 ./backend/main.py      →     /app/main.py
 ./logs                 →     /var/log/kaligpt
 ./data                 →     /app/data

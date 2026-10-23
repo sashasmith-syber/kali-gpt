@@ -178,7 +178,7 @@ curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 sudo apt install -y nodejs
 
 # Navigate to frontend
-cd ~/Desktop/kali-gpt/frontend
+cd ~/Desktop/kali-gpt/backend/frontend
 
 # Install dependencies
 npm install
@@ -228,7 +228,7 @@ After=network.target kaligpt-backend.service
 [Service]
 Type=simple
 User=kali
-WorkingDirectory=/home/kali/Desktop/kali-gpt/frontend
+WorkingDirectory=/home/kali/Desktop/kali-gpt/backend/frontend
 ExecStart=/usr/bin/npm run dev
 Restart=always
 
@@ -349,7 +349,7 @@ sudo systemctl restart ssh
 # Set proper file permissions
 cd ~/Desktop/kali-gpt
 chmod 700 backend/
-chmod 700 frontend/
+chmod 700 backend/frontend/
 chmod 600 backend/.env
 
 # Create audit log directory
@@ -433,7 +433,7 @@ pip install gunicorn
 gunicorn main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
 
 # Frontend: Build for production
-cd frontend
+cd backend/frontend
 npm run build
 npm install -g serve
 serve -s dist -l 5173
@@ -518,7 +518,7 @@ docker-compose pull
 docker-compose up -d
 
 # Update Node packages
-cd frontend && npm update
+cd backend/frontend && npm update
 ```
 
 ### 2. Backup Strategy
