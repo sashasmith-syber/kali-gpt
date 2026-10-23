@@ -111,7 +111,7 @@ python3 main.py
 
 1. **Navigate to frontend directory**
 ```bash
-cd kali-gpt/backend/frontend
+cd backend/frontend
 ```
 
 2. **Install dependencies**

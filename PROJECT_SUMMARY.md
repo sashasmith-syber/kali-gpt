@@ -245,7 +245,7 @@ source venv/bin/activate
 pip install -r requirements.txt
 python3 main.py
 
-# Frontend
+# In a separate terminal, from the repository root
 cd backend/frontend && npm install
 npm run dev
 ```
