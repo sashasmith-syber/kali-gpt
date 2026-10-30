@@ -17,6 +17,12 @@ from sqlalchemy.orm import Session
 import os
 import secrets
 import logging
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+# Load backend/.env before reading secrets (import order safe for local runs)
+load_dotenv(Path(__file__).resolve().parent / ".env")
 
 from db.session import SessionLocal, get_db
 from db.models.user import APIKeyRecord, UserRecord, VALID_ROLES
