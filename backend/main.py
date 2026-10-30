@@ -6,9 +6,9 @@ SECURITY HARDENED VERSION
 
 from fastapi import FastAPI, HTTPException, Depends, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field, validator
-from typing import List, Optional, Dict, Any
+from fastapi.responses import JSONResponse, Response
+from pydantic import BaseModel, Field, constr, validator
+from typing import List, Optional, Dict, Any, Literal
 import subprocess
 import logging
 from datetime import datetime
@@ -112,19 +112,19 @@ logger.info("KaliGPT API initialized with security hardening and LLM service")
 # Models
 class Message(BaseModel):
     id: str
-    role: str
-    content: str
+    role: Literal["user", "assistant"]
+    content: str = Field(..., max_length=4000)
     timestamp: datetime
 
 class SecurityContext(BaseModel):
-    target: Optional[str] = None
-    scope: Optional[str] = None
+    target: Optional[str] = Field(None, max_length=255)
+    scope: Optional[str] = Field(None, max_length=2000)
     authorization: bool = False
 
 class ChatRequest(BaseModel):
-    message: str
+    message: str = Field(..., min_length=1, max_length=4000)
     context: SecurityContext
-    history: List[Message] = Field(default_factory=list)
+    history: List[Message] = Field(default_factory=list, max_length=20)
 
 class ChatResponse(BaseModel):
     response: str
@@ -139,6 +139,26 @@ class ExecuteResponse(BaseModel):
     exit_code: int
     executed_at: datetime
 
+
+class NetReaperProfileRequest(BaseModel):
+    profile: ResponseProfile
+
+
+class NetReaperBlockRequest(BaseModel):
+    ip: constr(max_length=45)
+    reason: str = Field(default="Manual block from Command Center", max_length=500)
+
+
+class NetReaperIpRequest(BaseModel):
+    ip: constr(max_length=45)
+
+
+class NetReaperThreatRequest(BaseModel):
+    risk_level: int = Field(default=0, ge=0, le=10)
+    threat_type: constr(max_length=100) = "unknown"
+    source_ips: List[constr(max_length=45)] = Field(default_factory=list, max_length=20)
+
+
 # API Endpoints
 @app.get("/health")
 async def health_check():
@@ -149,50 +169,75 @@ async def health_check():
         "version": "2.0.0"
     }
 
+@app.post("/api/auth/login", response_model=Token)
+@limiter.limit(get_rate_limit("auth_login"))
+async def login(request: Request, response: Response, login_request: UserLogin):
+    """Authenticate a user and issue bearer tokens."""
+    user = AuthService.authenticate_user(login_request.username, login_request.password)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return AuthService.create_tokens(user)
+
+
 @app.post("/api/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest):
-    """Handle chat messages and generate responses using the local LLM"""
+@limiter.limit(get_rate_limit("chat"))
+async def chat(
+    request: Request,
+    response: Response,
+    chat_request: ChatRequest,
+    current_user: UserInDB = Depends(get_current_active_user),
+):
+    """Handle authenticated chat messages using the local LLM."""
     try:
-        logger.info(f"Chat request: {request.message[:100]}...")
+        logger.info("Chat request from user %s", current_user.username)
 
-        # Prepare history for the LLM
-        history_formatted = [{"role": msg.role, "content": msg.content} for msg in request.history]
-
-        # Generate a prompt that includes the security context
+        history_formatted = [
+            {"role": msg.role, "content": msg.content} for msg in chat_request.history
+        ]
         prompt = f"""Context:
-Target: {request.context.target or 'Not set'}
-Scope: {request.context.scope or 'Not set'}
-Authorized: {'Yes' if request.context.authorization else 'No'}
+Target: {chat_request.context.target or 'Not set'}
+Scope: {chat_request.context.scope or 'Not set'}
+Authorized: {'Yes' if chat_request.context.authorization else 'No'}
 
-User Question: {request.message}
+User Question: {chat_request.message}
 
 Based on the context, provide a helpful and safe response. If a command is relevant, suggest one.
 """
 
-        # Generate response using LLMService
         llm_response = llm_service.generate_response(prompt, history_formatted)
-
         if llm_response.error:
-            raise HTTPException(status_code=500, detail=llm_response.error)
+            logger.error("LLM provider request failed.")
+            raise HTTPException(
+                status_code=502,
+                detail="The configured LLM provider is unavailable.",
+            )
 
-        # For now, we are not parsing command suggestions from the LLM response.
-        # This will be added in the next step.
         return ChatResponse(response=llm_response.content)
 
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error in chat endpoint: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("Unexpected chat endpoint failure (%s)", type(e).__name__)
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to process the chat request.",
+        ) from None
 
 @app.post("/api/execute", response_model=ExecuteResponse)
 @limiter.limit(get_rate_limit("execute"))
 async def execute_command(
     request: Request,
+    response: Response,
     execute_req: ExecuteRequest,
     current_user: UserInDB = Depends(get_current_active_user)
 ):
     """Execute security tool commands - REQUIRES AUTHENTICATION"""
     try:
-        logger.info(f"Execute request from user {current_user.username}: {execute_req.command}")
+        logger.info("Execute request from user %s", current_user.username)
         
         if not execute_req.context.authorization:
             raise HTTPException(
@@ -286,62 +331,68 @@ async def net_reaper_health():
     return net_reaper.get_health()
 
 @app.get("/net-reaper/profile")
-async def net_reaper_profile():
+async def net_reaper_profile(
+    current_user: UserInDB = Depends(get_current_admin_user),
+):
     """Get current NET REAPER profile info"""
     return net_reaper.get_profile_info()
 
 @app.post("/net-reaper/api/profile")
-async def net_reaper_switch_profile(profile_data: dict):
+@limiter.limit(get_rate_limit("admin"))
+async def net_reaper_switch_profile(
+    request: Request,
+    response: Response,
+    profile_data: NetReaperProfileRequest,
+    current_user: UserInDB = Depends(get_current_admin_user),
+):
     """Switch NET REAPER response profile"""
-    profile_name = profile_data.get("profile", "defensive")
-    try:
-        profile = ResponseProfile(profile_name)
-        success, message = net_reaper.switch_profile(profile)
-        if success:
-            return {"success": True, "profile": profile.value, "message": message}
-        else:
-            raise HTTPException(status_code=400, detail=message)
-    except ValueError:
-        raise HTTPException(status_code=400, detail=f"Invalid profile: {profile_name}")
+    success, message = net_reaper.switch_profile(profile_data.profile)
+    if not success:
+        raise HTTPException(status_code=400, detail=message)
+    return {
+        "success": True,
+        "profile": profile_data.profile.value,
+        "message": message,
+    }
 
 @app.post("/net-reaper/api/block")
-async def net_reaper_block_ip(block_data: dict):
+@limiter.limit(get_rate_limit("admin"))
+async def net_reaper_block_ip(
+    request: Request,
+    response: Response,
+    block_data: NetReaperBlockRequest,
+    current_user: UserInDB = Depends(get_current_admin_user),
+):
     """Block an IP address"""
-    ip = block_data.get("ip")
-    reason = block_data.get("reason", "Manual block from Command Center")
-    
-    if not ip:
-        raise HTTPException(status_code=400, detail="IP address required")
-    
-    success, message = net_reaper.block_ip(ip, reason)
+    success, message = net_reaper.block_ip(block_data.ip, block_data.reason)
     if success:
         return {"success": True, "message": message}
-    else:
-        raise HTTPException(status_code=400, detail=message)
+    raise HTTPException(status_code=400, detail=message)
 
 @app.post("/net-reaper/api/unblock")
-async def net_reaper_unblock_ip(unblock_data: dict):
+@limiter.limit(get_rate_limit("admin"))
+async def net_reaper_unblock_ip(
+    request: Request,
+    response: Response,
+    unblock_data: NetReaperIpRequest,
+    current_user: UserInDB = Depends(get_current_admin_user),
+):
     """Unblock an IP address"""
-    ip = unblock_data.get("ip")
-    
-    if not ip:
-        raise HTTPException(status_code=400, detail="IP address required")
-    
-    success, message = net_reaper.unblock_ip(ip)
+    success, message = net_reaper.unblock_ip(unblock_data.ip)
     if success:
         return {"success": True, "message": message}
-    else:
-        raise HTTPException(status_code=400, detail=message)
+    raise HTTPException(status_code=400, detail=message)
 
 @app.post("/net-reaper/api/scan")
-async def net_reaper_scan_ip(scan_data: dict):
+@limiter.limit(get_rate_limit("execute_heavy"))
+async def net_reaper_scan_ip(
+    request: Request,
+    response: Response,
+    scan_data: NetReaperIpRequest,
+    current_user: UserInDB = Depends(get_current_admin_user),
+):
     """Perform authorized reconnaissance scan"""
-    ip = scan_data.get("ip")
-    
-    if not ip:
-        raise HTTPException(status_code=400, detail="IP address required")
-    
-    success, scan_result, message = net_reaper.scan_ip(ip)
+    success, scan_result, message = net_reaper.scan_ip(scan_data.ip)
     if success and scan_result:
         return {
             "success": True,
@@ -356,7 +407,9 @@ async def net_reaper_scan_ip(scan_data: dict):
         raise HTTPException(status_code=400, detail=message)
 
 @app.get("/net-reaper/blocked")
-async def net_reaper_blocked_ips():
+async def net_reaper_blocked_ips(
+    current_user: UserInDB = Depends(get_current_admin_user),
+):
     """Get list of blocked IPs"""
     blocked = net_reaper.get_blocked_ips()
     return {
@@ -374,10 +427,16 @@ async def net_reaper_blocked_ips():
     }
 
 @app.post("/net-reaper/api/threat")
-async def net_reaper_process_threat(threat_data: dict):
+@limiter.limit(get_rate_limit("admin"))
+async def net_reaper_process_threat(
+    request: Request,
+    response: Response,
+    threat_data: NetReaperThreatRequest,
+    current_user: UserInDB = Depends(get_current_admin_user),
+):
     """Process a threat event"""
     try:
-        event = net_reaper.process_threat(threat_data)
+        event = net_reaper.process_threat(threat_data.model_dump())
         return {
             "success": event.success,
             "event": {

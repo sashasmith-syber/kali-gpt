@@ -23,9 +23,14 @@ name: Security Hardening Pipeline
 
 on:
   push:
-    branches: ["blackboxai/security-audit-fixes", "main"]
+    branches:
+      - "blackboxai/security-audit-fixes"
+      - "main"
+      - "dependabot/npm_and_yarn/Net-Reaper-Claude-Integration-Architecture/app/flatted-3.4.2"
   pull_request:
-    branches: ["main"]
+    branches:
+      - "main"
+      - "dependabot/npm_and_yarn/Net-Reaper-Claude-Integration-Architecture/app/flatted-3.4.2"
   schedule:
     # Run full scan nightly at 02:00 UTC
     - cron: "0 2 * * *"
@@ -81,17 +86,17 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@ce28f5bb42b7a9f2c824e633a3f6ee835bab6858 # v3.28.8
+        uses: github/codeql-action/init@dd746615b3b9d728a6a37ca2045b68ca76d4841a # v3.28.8
         with:
           languages: ${{ matrix.language }}
           # Use extended security-and-quality query suite
           queries: security-extended,security-and-quality
 
       - name: Autobuild
-        uses: github/codeql-action/autobuild@ce28f5bb42b7a9f2c824e633a3f6ee835bab6858 # v3.28.8
+        uses: github/codeql-action/autobuild@dd746615b3b9d728a6a37ca2045b68ca76d4841a # v3.28.8
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@ce28f5bb42b7a9f2c824e633a3f6ee835bab6858 # v3.28.8
+        uses: github/codeql-action/analyze@dd746615b3b9d728a6a37ca2045b68ca76d4841a # v3.28.8
         with:
           category: "/language:${{ matrix.language }}"
 
@@ -104,7 +109,6 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
-      security-events: write
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -122,7 +126,7 @@ jobs:
         run: |
           pip-audit -r backend/requirements.txt \
             --format cyclonedx-json \
-            --output pip-audit-results.json || true
+            --output pip-audit-results.json
 
       - name: Upload pip-audit results
         uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
@@ -165,8 +169,7 @@ jobs:
 
       - name: npm audit
         working-directory: "${{ matrix.workspace }}"
-        # Exit 0 so pipeline doesn't hard-fail on moderate; high+ handled by dependency-review
-        run: npm audit --audit-level=high || true
+        run: npm audit --audit-level=high
 
   # ---------------------------------------------------------------------------
   # 5. Secret scanning — gitleaks
@@ -184,21 +187,21 @@ jobs:
           fetch-depth: 0
 
       - name: Run gitleaks
-        uses: gitleaks/gitleaks-action@44c470e46d8c7b47291b39041cae61a8b04d8cc8 # v2.3.7
+        uses: gitleaks/gitleaks-action@83373cf2f8c4db6e24b41c1a9b086bb9619e9cd3 # v2.3.7
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}   # optional; free for public repos
 
   # ---------------------------------------------------------------------------
-  # 6. SBOM generation (CycloneDX) — attached on release
+  # 6. SBOM generation (CycloneDX) — available as a workflow artifact on dispatch
   # ---------------------------------------------------------------------------
   sbom:
     name: Generate SBOM
     runs-on: ubuntu-24.04
-    if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch'
     timeout-minutes: 15
     permissions:
-      contents: write             # to upload release asset
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
