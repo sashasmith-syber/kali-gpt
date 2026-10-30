@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y \
     python3 \
     python3-pip \
     python3-venv \
+    curl \
     nmap \
     nikto \
     dirb \
@@ -28,6 +29,9 @@ RUN python3 -m venv /app/venv && \
 
 # Copy application code
 COPY . .
+
+# Persistent SQLite / app data (Compose mounts kaligpt-data here)
+RUN mkdir -p /data /app/data
 
 # Expose port
 EXPOSE 8000
