@@ -1,35 +1,103 @@
+/**
+ * Desktop Defender Electron Main
+ * Author: sashasmith-syber
+ */
 const { app, BrowserWindow, ipcMain } = require("electron");
+const fs = require("fs");
 const path = require("path");
-const Store = require("electron-store");
 
-const store = new Store({
-  name: "desktop-defender-config",
-  defaults: {
-    agentBaseUrl: "http://127.0.0.1:8787"
-    // Note: No default agentToken - user must configure this securely
-  }
-});
+const CONFIG_FILE = () => path.join(app.getPath("userData"), "desktop-defender-config.json");
 
-// Security warning if token not configured
-function checkSecurityConfig() {
-  const token = store.get("agentToken");
-  if (!token) {
-    console.warn("⚠️  SECURITY WARNING: Agent token not configured!");
-    console.warn("⚠️  Please configure a secure token before using Desktop Defender.");
-    console.warn("⚠️  The agent token can be found in the agent startup logs or ~/.desktop-defender-agent-token");
-    return false;
+const DEFAULT_CONFIG = {
+  agentBaseUrl: "http://127.0.0.1:8787",
+  agentToken: ""
+};
+
+function readTokenFile() {
+  try {
+    const tokenPath = path.join(app.getPath("home"), ".desktop-defender-agent-token");
+    return fs.readFileSync(tokenPath, "utf8").trim();
+  } catch {
+    return "";
   }
-  return true;
+}
+
+function readConfig() {
+  let cfg = { ...DEFAULT_CONFIG };
+  try {
+    const raw = fs.readFileSync(CONFIG_FILE(), "utf8");
+    cfg = { ...cfg, ...JSON.parse(raw) };
+  } catch {
+    // first run
+  }
+  if (!cfg.agentToken) {
+    cfg.agentToken = readTokenFile();
+  }
+  return cfg;
+}
+
+function writeConfig(next) {
+  const dir = path.dirname(CONFIG_FILE());
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(CONFIG_FILE(), JSON.stringify(next, null, 2), "utf8");
+}
+
+async function agentRequest({ method = "GET", path: apiPath = "/", body = null }) {
+  const cfg = readConfig();
+  const base = (cfg.agentBaseUrl || DEFAULT_CONFIG.agentBaseUrl).replace(/\/$/, "");
+  const url = `${base}${apiPath.startsWith("/") ? apiPath : `/${apiPath}`}`;
+
+  const headers = {
+    Accept: "application/json",
+    "X-Agent-Token": cfg.agentToken || ""
+  };
+  const init = { method: method.toUpperCase(), headers };
+  if (body != null && init.method !== "GET" && init.method !== "HEAD") {
+    headers["Content-Type"] = "application/json";
+    init.body = JSON.stringify(body);
+  }
+
+  let response;
+  try {
+    response = await fetch(url, init);
+  } catch (err) {
+    const error = new Error(err.message || "Network Error");
+    error.code = "NETWORK";
+    throw error;
+  }
+
+  const text = await response.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = { raw: text };
+  }
+
+  if (!response.ok) {
+    const error = new Error(
+      (data && (data.detail || data.message)) || `HTTP ${response.status}`
+    );
+    error.status = response.status;
+    error.data = data;
+    throw error;
+  }
+  return data;
 }
 
 function createWindow() {
   const win = new BrowserWindow({
-    width: 1200,
-    height: 800,
+    width: 1280,
+    height: 860,
+    minWidth: 960,
+    minHeight: 640,
+    backgroundColor: "#0b0f14",
+    title: "Desktop Defender",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      sandbox: true
     }
   });
 
@@ -44,24 +112,38 @@ function createWindow() {
 app.whenReady().then(() => {
   createWindow();
 
-  ipcMain.handle("config:get", async () => {
-    return {
-      agentBaseUrl: store.get("agentBaseUrl"),
-      agentToken: store.get("agentToken")
-    };
-  });
+  ipcMain.handle("config:get", async () => readConfig());
 
   ipcMain.handle("config:set", async (_event, payload) => {
-    if (payload.agentBaseUrl) store.set("agentBaseUrl", payload.agentBaseUrl);
-    if (payload.agentToken) store.set("agentToken", payload.agentToken);
+    const current = readConfig();
+    const next = {
+      agentBaseUrl: payload?.agentBaseUrl || current.agentBaseUrl,
+      agentToken:
+        typeof payload?.agentToken === "string" ? payload.agentToken : current.agentToken
+    };
+    writeConfig(next);
     return { ok: true };
   });
 
-  app.on("activate", function () {
+  ipcMain.handle("agent:request", async (_event, payload) => {
+    try {
+      const data = await agentRequest(payload || {});
+      return { ok: true, data };
+    } catch (err) {
+      return {
+        ok: false,
+        error: err.message || "Request failed",
+        status: err.status || null,
+        data: err.data || null
+      };
+    }
+  });
+
+  app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
 
-app.on("window-all-closed", function () {
+app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });
