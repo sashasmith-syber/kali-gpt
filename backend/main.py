@@ -221,11 +221,25 @@ async def login(
     return AuthService.create_tokens(user)
 
 
+# Local-first default: no self-serve or admin API registration.
+# Set KALIGPT_ALLOW_REGISTRATION=true only if you intentionally provision users via API.
+_ALLOW_REGISTRATION = os.getenv("KALIGPT_ALLOW_REGISTRATION", "false").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+}
+
+
 @app.post("/api/auth/register", response_model=dict)
 async def register_user(
     user_data: UserCreate,
     _admin: UserInDB = Depends(get_current_admin_user),
 ):
+    if not _ALLOW_REGISTRATION:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User registration is disabled on this instance",
+        )
     try:
         user = AuthService.create_user(user_data)
         return {
