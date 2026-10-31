@@ -46,6 +46,25 @@ REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 security = HTTPBearer(auto_error=False)
 
+# bcrypt only consumes the first 72 bytes of a secret. Longer inputs are
+# truncated (bcrypt <5) or rejected (bcrypt >=5); keep app limits in sync.
+BCRYPT_MAX_PASSWORD_BYTES = 72
+
+
+def _password_utf8_byte_length(password: str) -> int:
+    return len(password.encode("utf-8"))
+
+
+def _ensure_bcrypt_password_length(password: str, *, label: str = "Password") -> str:
+    """Reject secrets that exceed bcrypt's 72-byte input limit."""
+    byte_len = _password_utf8_byte_length(password)
+    if byte_len > BCRYPT_MAX_PASSWORD_BYTES:
+        raise ValueError(
+            f"{label} cannot exceed {BCRYPT_MAX_PASSWORD_BYTES} bytes "
+            f"(got {byte_len}; bcrypt limit)"
+        )
+    return password
+
 
 class User(BaseModel):
     id: Optional[int] = None
@@ -83,7 +102,7 @@ class UserCreate(BaseModel):
     username: str = Field(..., min_length=3, max_length=50)
     email: EmailStr
     # bcrypt accepts at most 72 bytes; keep Field max in sync
-    password: str = Field(..., min_length=8, max_length=72)
+    password: str = Field(..., min_length=8, max_length=BCRYPT_MAX_PASSWORD_BYTES)
     full_name: Optional[str] = None
     role: str = "operator"
 
@@ -92,6 +111,7 @@ class UserCreate(BaseModel):
     def password_strength(cls, v: str) -> str:
         if len(v) < 8:
             raise ValueError("Password must be at least 8 characters")
+        _ensure_bcrypt_password_length(v)
         if not any(c.isupper() for c in v):
             raise ValueError("Password must contain at least one uppercase letter")
         if not any(c.islower() for c in v):
@@ -112,7 +132,12 @@ class UserCreate(BaseModel):
 
 class UserLogin(BaseModel):
     username: str = Field(..., min_length=3, max_length=50)
-    password: str = Field(..., min_length=1, max_length=72)
+    password: str = Field(..., min_length=1, max_length=BCRYPT_MAX_PASSWORD_BYTES)
+
+    @field_validator("password")
+    @classmethod
+    def password_bcrypt_limit(cls, v: str) -> str:
+        return _ensure_bcrypt_password_length(v)
 
 
 class Token(BaseModel):
@@ -141,10 +166,14 @@ class APIKey(BaseModel):
 class PasswordHasher:
     @staticmethod
     def hash_password(password: str) -> str:
+        _ensure_bcrypt_password_length(password)
         return pwd_context.hash(password)
 
     @staticmethod
     def verify_password(plain_password: str, hashed_password: str) -> bool:
+        # Refuse oversize inputs so bcrypt>=5 does not raise during login.
+        if _password_utf8_byte_length(plain_password) > BCRYPT_MAX_PASSWORD_BYTES:
+            return False
         return pwd_context.verify(plain_password, hashed_password)
 
 
@@ -431,11 +460,11 @@ def init_default_admin(db: Optional[Session] = None) -> None:
                 "in the backend environment to enable login."
             )
             return
-        if not 16 <= len(admin_password) <= 72:
-            raise ValueError(
-                "KALIGPT_ADMIN_PASSWORD must be between 16 and 72 characters "
-                "(bcrypt limit)"
-            )
+        if len(admin_password) < 16:
+            raise ValueError("KALIGPT_ADMIN_PASSWORD must be at least 16 characters")
+        _ensure_bcrypt_password_length(
+            admin_password, label="KALIGPT_ADMIN_PASSWORD"
+        )
 
         record = UserRecord(
             username=admin_username,
