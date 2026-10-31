@@ -101,6 +101,20 @@ const KaliGptClaude: React.FC = () => {
     }
   };
 
+  const formatLoginDetail = (detail: unknown): string => {
+    if (typeof detail === 'string') return detail;
+    if (Array.isArray(detail)) {
+      const parts = detail.map((item) => {
+        if (item && typeof item === 'object' && 'msg' in item) {
+          return String((item as { msg: unknown }).msg);
+        }
+        return typeof item === 'string' ? item : '';
+      }).filter(Boolean);
+      return parts.join('; ') || 'Login failed';
+    }
+    return 'Login failed';
+  };
+
   const login = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError('');
@@ -113,7 +127,7 @@ const KaliGptClaude: React.FC = () => {
       setToken(res.data.access_token);
       setPassword('');
     } catch (err: any) {
-      setLoginError(err.response?.data?.detail || 'Login failed');
+      setLoginError(formatLoginDetail(err.response?.data?.detail) || 'Login failed');
     }
   };
 
@@ -226,6 +240,8 @@ const KaliGptClaude: React.FC = () => {
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             autoComplete="username"
+            required
+            minLength={3}
           />
           <input
             className="kgpt-input"
@@ -234,6 +250,8 @@ const KaliGptClaude: React.FC = () => {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             autoComplete="current-password"
+            required
+            minLength={8}
           />
           {loginError && <div className="kgpt-error">{loginError}</div>}
           <div style={{ display: 'flex', gap: '0.5rem' }}>

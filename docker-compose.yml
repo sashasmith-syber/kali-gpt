@@ -11,7 +11,8 @@ services:
       - kaligpt-data:/data
     environment:
       - PYTHONUNBUFFERED=1
-      - DATABASE_URL=sqlite:////data/kaligpt.db
+      # Override with postgresql+psycopg://… when using --profile team (see .env.example)
+      - DATABASE_URL=${DATABASE_URL:-sqlite:////data/kaligpt.db}
       - SECRET_KEY=${SECRET_KEY:-change-me-set-a-stable-secret}
       - KALIGPT_ADMIN_PASSWORD=${KALIGPT_ADMIN_PASSWORD:-}
       - KALIGPT_ADMIN_USERNAME=${KALIGPT_ADMIN_USERNAME:-admin}
@@ -31,6 +32,9 @@ services:
     depends_on:
       ollama:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
+        required: false
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s

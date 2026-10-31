@@ -8,11 +8,16 @@ from fastapi import Body, FastAPI, HTTPException, Depends, Request, Response, st
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
+import asyncio
 import subprocess
 import logging
 from datetime import datetime
 import os
+from pathlib import Path
 from dotenv import load_dotenv
+
+# Load .env before local imports bind SECRET_KEY / DATABASE_URL
+load_dotenv(Path(__file__).resolve().parent / ".env")
 
 from security import (
     CommandValidator,
@@ -46,8 +51,6 @@ from net_reaper import (
     get_net_reaper_service,
     NetReaperHealth,
 )
-
-load_dotenv()
 
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),
@@ -185,7 +188,8 @@ class LLMConfigUpdate(BaseModel):
 
 @app.get("/health")
 async def health_check():
-    llm = llm_service.health()
+    # Probe off the event loop; LLM health uses a short timeout (see llm.py)
+    llm = await asyncio.to_thread(llm_service.health)
     return {
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),

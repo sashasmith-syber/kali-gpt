@@ -82,7 +82,8 @@ class UserInDB(User):
 class UserCreate(BaseModel):
     username: str = Field(..., min_length=3, max_length=50)
     email: EmailStr
-    password: str = Field(..., min_length=8, max_length=100)
+    # bcrypt accepts at most 72 bytes; keep Field max in sync
+    password: str = Field(..., min_length=8, max_length=72)
     full_name: Optional[str] = None
     role: str = "operator"
 
@@ -111,7 +112,7 @@ class UserCreate(BaseModel):
 
 class UserLogin(BaseModel):
     username: str = Field(..., min_length=3, max_length=50)
-    password: str = Field(..., min_length=1, max_length=128)
+    password: str = Field(..., min_length=1, max_length=72)
 
 
 class Token(BaseModel):
@@ -430,8 +431,11 @@ def init_default_admin(db: Optional[Session] = None) -> None:
                 "in the backend environment to enable login."
             )
             return
-        if not 16 <= len(admin_password) <= 128:
-            raise ValueError("KALIGPT_ADMIN_PASSWORD must be between 16 and 128 characters")
+        if not 16 <= len(admin_password) <= 72:
+            raise ValueError(
+                "KALIGPT_ADMIN_PASSWORD must be between 16 and 72 characters "
+                "(bcrypt limit)"
+            )
 
         record = UserRecord(
             username=admin_username,

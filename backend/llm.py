@@ -74,6 +74,10 @@ class LLMProvider:
     def _timeout(self):
         return (self.config.connect_timeout, self.config.timeout)
 
+    def _health_timeout(self):
+        # Keep /health under Compose's 10s probe; do not use generate timeouts.
+        return (min(self.config.connect_timeout, 2), 3)
+
 
 class OllamaProvider(LLMProvider):
     def __init__(self, config: LLMConfig):
@@ -150,7 +154,7 @@ class OllamaProvider(LLMProvider):
     def health(self) -> LLMHealth:
         started = time.perf_counter()
         try:
-            response = self.session.get(self.tags_url, timeout=self._timeout())
+            response = self.session.get(self.tags_url, timeout=self._health_timeout())
             response.raise_for_status()
             latency = (time.perf_counter() - started) * 1000
             return LLMHealth(
@@ -229,7 +233,7 @@ class LMStudioProvider(LLMProvider):
     def health(self) -> LLMHealth:
         started = time.perf_counter()
         try:
-            response = self.session.get(self.models_url, timeout=self._timeout())
+            response = self.session.get(self.models_url, timeout=self._health_timeout())
             response.raise_for_status()
             latency = (time.perf_counter() - started) * 1000
             return LLMHealth(
