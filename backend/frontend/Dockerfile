@@ -6,8 +6,8 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm install
+# Install dependencies (legacy peer deps avoids Vite/ESLint peer conflicts in CI images)
+RUN npm install --legacy-peer-deps
 
 # Copy application code
 COPY . .
