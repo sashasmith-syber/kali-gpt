@@ -185,7 +185,7 @@ class NetReaperService:
 
             config = self.profile_configs[self.current_profile]
             threshold = config["threshold"]
-            action_taken = "monitored"
+            blocked_ips: List[str] = []
             success = True
 
             if risk_level >= threshold:
@@ -196,7 +196,12 @@ class NetReaperService:
                             f"Auto-block: {threat_type} (risk: {risk_level})",
                         )
                         if block_success:
-                            action_taken = f"blocked:{ip}"
+                            blocked_ips.append(ip)
+
+            # Record every newly blocked IP; overwrite would drop earlier blocks.
+            action_taken = (
+                f"blocked:{','.join(blocked_ips)}" if blocked_ips else "monitored"
+            )
 
             event = ThreatEvent(
                 event=f"threat_detected:{threat_type}",
