@@ -2,7 +2,7 @@
  * Desktop Defender App
  * Author: sashasmith-syber
  */
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import axios from "axios";
 
 const DEFAULT_POLICIES = {
@@ -54,9 +54,16 @@ function App() {
   const [containPid, setContainPid] = useState("");
   const [blockIp, setBlockIp] = useState("");
   const [tab, setTab] = useState("incidents");
+  // Keep unsaved form edits across 15s polls / in-flight refreshAll.
+  const policiesDirtyRef = useRef(false);
 
   const online = health?.status === "healthy";
   const bridge = Boolean(window.desktopDefender?.agentRequest);
+
+  function updatePolicies(next) {
+    policiesDirtyRef.current = true;
+    setPolicies(next);
+  }
 
   useEffect(() => {
     (async () => {
@@ -84,7 +91,9 @@ function App() {
         api(config, { path: "/audit" })
       ]);
       setHealth(h);
-      setPolicies(p);
+      if (!policiesDirtyRef.current) {
+        setPolicies(p);
+      }
       setIncidents(i.incidents || []);
       setAudit([...(a.audit || [])].reverse());
       setMessage("Connected to local agent.");
@@ -117,6 +126,7 @@ function App() {
     setBusy(true);
     try {
       await api(config, { method: "POST", path: "/policy", body: policies });
+      policiesDirtyRef.current = false;
       setMessage(`Policy set to ${policies.mode}.`);
       await refreshAll();
     } catch (err) {
@@ -249,7 +259,7 @@ function App() {
           <select
             id="mode"
             value={policies.mode}
-            onChange={(e) => setPolicies({ ...policies, mode: e.target.value })}
+            onChange={(e) => updatePolicies({ ...policies, mode: e.target.value })}
           >
             <option value="monitor">monitor</option>
             <option value="alert">alert</option>
@@ -266,7 +276,7 @@ function App() {
               <input
                 type="checkbox"
                 checked={Boolean(policies[key])}
-                onChange={(e) => setPolicies({ ...policies, [key]: e.target.checked })}
+                onChange={(e) => updatePolicies({ ...policies, [key]: e.target.checked })}
               />
               {label}
             </label>

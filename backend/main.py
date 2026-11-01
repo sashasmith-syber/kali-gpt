@@ -415,23 +415,38 @@ async def llm_config_update(
     body: LLMConfigUpdate,
     _admin: UserInDB = Depends(get_current_admin_user),
 ):
-    provider = body.provider
-    host = body.host
-    model = body.model
-    if provider:
-        _save_llm_setting("llm.provider", provider)
-    if host:
-        _save_llm_setting("llm.host", host)
-    if model:
-        _save_llm_setting("llm.model", model)
-
     current = llm_service.provider.config if llm_service.provider else None
-    llm_service.reload(
-        provider=provider or (current.provider if current else None),
-        host=host or (current.host if current else None),
-        model=model or (current.model if current else None),
+    provider = body.provider or (current.provider if current else None)
+    provider_changed = bool(
+        body.provider and current and body.provider != current.provider
     )
-    health = llm_service.health()
+
+    # Provider switch without an explicit host/model must not reuse the
+    # previous provider's host (e.g. Ollama → LM Studio).
+    if body.host is not None:
+        host = body.host
+    elif provider_changed or current is None:
+        host = None
+    else:
+        host = current.host
+
+    if body.model is not None:
+        model = body.model
+    elif provider_changed or current is None:
+        model = None
+    else:
+        model = current.model
+
+    llm_service.reload(provider=provider, host=host, model=model)
+
+    # Persist the same complete config the live service resolved.
+    if llm_service.provider:
+        resolved = llm_service.provider.config
+        _save_llm_setting("llm.provider", resolved.provider)
+        _save_llm_setting("llm.host", resolved.host)
+        _save_llm_setting("llm.model", resolved.model)
+
+    health = await asyncio.to_thread(llm_service.health)
     return {"success": True, "health": health.model_dump()}
 
 

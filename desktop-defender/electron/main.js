@@ -42,6 +42,8 @@ function writeConfig(next) {
   fs.writeFileSync(CONFIG_FILE(), JSON.stringify(next, null, 2), "utf8");
 }
 
+const AGENT_REQUEST_TIMEOUT_MS = 8000;
+
 async function agentRequest({ method = "GET", path: apiPath = "/", body = null }) {
   const cfg = readConfig();
   const base = (cfg.agentBaseUrl || DEFAULT_CONFIG.agentBaseUrl).replace(/\/$/, "");
@@ -51,38 +53,59 @@ async function agentRequest({ method = "GET", path: apiPath = "/", body = null }
     Accept: "application/json",
     "X-Agent-Token": cfg.agentToken || ""
   };
-  const init = { method: method.toUpperCase(), headers };
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), AGENT_REQUEST_TIMEOUT_MS);
+  const init = { method: method.toUpperCase(), headers, signal: controller.signal };
   if (body != null && init.method !== "GET" && init.method !== "HEAD") {
     headers["Content-Type"] = "application/json";
     init.body = JSON.stringify(body);
   }
 
-  let response;
   try {
-    response = await fetch(url, init);
-  } catch (err) {
-    const error = new Error(err.message || "Network Error");
-    error.code = "NETWORK";
-    throw error;
-  }
+    let response;
+    try {
+      response = await fetch(url, init);
+    } catch (err) {
+      if (err?.name === "AbortError") {
+        const error = new Error("Request timed out");
+        error.code = "TIMEOUT";
+        throw error;
+      }
+      const error = new Error(err.message || "Network Error");
+      error.code = "NETWORK";
+      throw error;
+    }
 
-  const text = await response.text();
-  let data = null;
-  try {
-    data = text ? JSON.parse(text) : null;
-  } catch {
-    data = { raw: text };
-  }
+    let text;
+    try {
+      text = await response.text();
+    } catch (err) {
+      if (err?.name === "AbortError") {
+        const error = new Error("Request timed out");
+        error.code = "TIMEOUT";
+        throw error;
+      }
+      throw err;
+    }
+    let data = null;
+    try {
+      data = text ? JSON.parse(text) : null;
+    } catch {
+      data = { raw: text };
+    }
 
-  if (!response.ok) {
-    const error = new Error(
-      (data && (data.detail || data.message)) || `HTTP ${response.status}`
-    );
-    error.status = response.status;
-    error.data = data;
-    throw error;
+    if (!response.ok) {
+      const error = new Error(
+        (data && (data.detail || data.message)) || `HTTP ${response.status}`
+      );
+      error.status = response.status;
+      error.data = data;
+      throw error;
+    }
+    return data;
+  } finally {
+    clearTimeout(timer);
   }
-  return data;
 }
 
 function createWindow() {
