@@ -1,83 +1,146 @@
 """
-Authentication and authorization module for KaliGPT
-Implements JWT-based authentication with secure password hashing
+Authentication and authorization for KaliGPT.
+JWT auth with persistent users (SQLite/Postgres) and RBAC roles.
 """
 
+from __future__ import annotations
+
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any
-from jose import JWTError, jwt
+from typing import Callable, Optional, Set
+import jwt
+from jwt.exceptions import InvalidTokenError as JWTError
 from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status, Header
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from pydantic import BaseModel, EmailStr, Field, validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
+from sqlalchemy.orm import Session
+import os
 import secrets
 import logging
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+# Load backend/.env before reading secrets (import order safe for local runs)
+load_dotenv(Path(__file__).resolve().parent / ".env")
+
+from db.session import SessionLocal, get_db
+from db.models.user import APIKeyRecord, UserRecord, VALID_ROLES
 
 logger = logging.getLogger(__name__)
 
-# Security configuration
-SECRET_KEY = secrets.token_urlsafe(32)  # Generate secure random key
+_raw_secret = os.getenv("SECRET_KEY", "").strip()
+if _raw_secret:
+    SECRET_KEY = _raw_secret
+else:
+    SECRET_KEY = secrets.token_urlsafe(32)
+    logger.warning(
+        "SECRET_KEY is not set; using an ephemeral key. "
+        "Tokens will invalidate on restart. Set SECRET_KEY in the environment."
+    )
+
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60
-REFRESH_TOKEN_EXPIRE_DAYS = 7
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
+REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
 
-# Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+security = HTTPBearer(auto_error=False)
 
-# HTTP Bearer token scheme
-security = HTTPBearer()
+# bcrypt only consumes the first 72 bytes of a secret. Longer inputs are
+# truncated (bcrypt <5) or rejected (bcrypt >=5); keep app limits in sync.
+BCRYPT_MAX_PASSWORD_BYTES = 72
 
 
-# Models
+def _password_utf8_byte_length(password: str) -> int:
+    return len(password.encode("utf-8"))
+
+
+def _ensure_bcrypt_password_length(password: str, *, label: str = "Password") -> str:
+    """Reject secrets that exceed bcrypt's 72-byte input limit."""
+    byte_len = _password_utf8_byte_length(password)
+    if byte_len > BCRYPT_MAX_PASSWORD_BYTES:
+        raise ValueError(
+            f"{label} cannot exceed {BCRYPT_MAX_PASSWORD_BYTES} bytes "
+            f"(got {byte_len}; bcrypt limit)"
+        )
+    return password
+
+
 class User(BaseModel):
-    """User model"""
+    id: Optional[int] = None
     username: str = Field(..., min_length=3, max_length=50)
     email: EmailStr
     full_name: Optional[str] = None
     disabled: bool = False
-    role: str = "user"  # user, admin
-    created_at: datetime = Field(default_factory=datetime.now)
-    
-    @validator('username')
-    def username_alphanumeric(cls, v):
-        if not v.replace('_', '').replace('-', '').isalnum():
-            raise ValueError('Username must be alphanumeric (with _ or - allowed)')
+    role: str = "operator"
+    auth_provider: str = "local"
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    @field_validator("username")
+    @classmethod
+    def username_alphanumeric(cls, v: str) -> str:
+        if not v.replace("_", "").replace("-", "").isalnum():
+            raise ValueError("Username must be alphanumeric (with _ or - allowed)")
+        return v
+
+    @field_validator("role")
+    @classmethod
+    def role_allowed(cls, v: str) -> str:
+        # Accept legacy "user" as operator
+        if v == "user":
+            return "operator"
+        if v not in VALID_ROLES:
+            raise ValueError(f"Role must be one of: {', '.join(VALID_ROLES)}")
         return v
 
 
 class UserInDB(User):
-    """User model with hashed password"""
-    hashed_password: str
+    hashed_password: Optional[str] = None
 
 
 class UserCreate(BaseModel):
-    """User registration model"""
     username: str = Field(..., min_length=3, max_length=50)
     email: EmailStr
-    password: str = Field(..., min_length=8, max_length=100)
+    # bcrypt accepts at most 72 bytes; keep Field max in sync
+    password: str = Field(..., min_length=8, max_length=BCRYPT_MAX_PASSWORD_BYTES)
     full_name: Optional[str] = None
-    
-    @validator('password')
-    def password_strength(cls, v):
+    role: str = "operator"
+
+    @field_validator("password")
+    @classmethod
+    def password_strength(cls, v: str) -> str:
         if len(v) < 8:
-            raise ValueError('Password must be at least 8 characters')
+            raise ValueError("Password must be at least 8 characters")
+        _ensure_bcrypt_password_length(v)
         if not any(c.isupper() for c in v):
-            raise ValueError('Password must contain at least one uppercase letter')
+            raise ValueError("Password must contain at least one uppercase letter")
         if not any(c.islower() for c in v):
-            raise ValueError('Password must contain at least one lowercase letter')
+            raise ValueError("Password must contain at least one lowercase letter")
         if not any(c.isdigit() for c in v):
-            raise ValueError('Password must contain at least one digit')
+            raise ValueError("Password must contain at least one digit")
+        return v
+
+    @field_validator("role")
+    @classmethod
+    def role_allowed(cls, v: str) -> str:
+        if v == "user":
+            return "operator"
+        if v not in VALID_ROLES:
+            raise ValueError(f"Role must be one of: {', '.join(VALID_ROLES)}")
         return v
 
 
 class UserLogin(BaseModel):
-    """User login model"""
-    username: str
-    password: str
+    username: str = Field(..., min_length=3, max_length=50)
+    password: str = Field(..., min_length=1, max_length=BCRYPT_MAX_PASSWORD_BYTES)
+
+    @field_validator("password")
+    @classmethod
+    def password_bcrypt_limit(cls, v: str) -> str:
+        return _ensure_bcrypt_password_length(v)
 
 
 class Token(BaseModel):
-    """Token response model"""
     access_token: str
     refresh_token: str
     token_type: str = "bearer"
@@ -85,14 +148,13 @@ class Token(BaseModel):
 
 
 class TokenData(BaseModel):
-    """Token payload data"""
     username: Optional[str] = None
     role: Optional[str] = None
+    uid: Optional[int] = None
     exp: Optional[datetime] = None
 
 
 class APIKey(BaseModel):
-    """API Key model"""
     key: str
     name: str
     user: str
@@ -101,298 +163,322 @@ class APIKey(BaseModel):
     is_active: bool = True
 
 
-# In-memory storage (replace with database in production)
-users_db: Dict[str, UserInDB] = {}
-api_keys_db: Dict[str, APIKey] = {}
-
-
 class PasswordHasher:
-    """Password hashing utilities"""
-    
     @staticmethod
     def hash_password(password: str) -> str:
-        """Hash a password"""
+        _ensure_bcrypt_password_length(password)
         return pwd_context.hash(password)
-    
+
     @staticmethod
     def verify_password(plain_password: str, hashed_password: str) -> bool:
-        """Verify a password against its hash"""
+        # Refuse oversize inputs so bcrypt>=5 does not raise during login.
+        if _password_utf8_byte_length(plain_password) > BCRYPT_MAX_PASSWORD_BYTES:
+            return False
         return pwd_context.verify(plain_password, hashed_password)
 
 
 class TokenManager:
-    """JWT token management"""
-    
     @staticmethod
     def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
-        """Create JWT access token"""
         to_encode = data.copy()
-        
-        if expires_delta:
-            expire = datetime.utcnow() + expires_delta
-        else:
-            expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-        
+        expire = datetime.utcnow() + (
+            expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        )
         to_encode.update({"exp": expire, "type": "access"})
-        encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-        return encoded_jwt
-    
+        return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
     @staticmethod
     def create_refresh_token(data: dict) -> str:
-        """Create JWT refresh token"""
         to_encode = data.copy()
         expire = datetime.utcnow() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
         to_encode.update({"exp": expire, "type": "refresh"})
-        encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-        return encoded_jwt
-    
+        return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
     @staticmethod
     def verify_token(token: str, token_type: str = "access") -> Optional[TokenData]:
-        """Verify and decode JWT token"""
         try:
             payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-            
-            # Check token type
             if payload.get("type") != token_type:
                 return None
-            
-            username: str = payload.get("sub")
-            role: str = payload.get("role")
-            exp: datetime = datetime.fromtimestamp(payload.get("exp"))
-            
+            username = payload.get("sub")
             if username is None:
                 return None
-            
-            return TokenData(username=username, role=role, exp=exp)
-            
+            return TokenData(
+                username=username,
+                role=payload.get("role"),
+                uid=payload.get("uid"),
+                exp=datetime.fromtimestamp(payload.get("exp")),
+            )
         except JWTError as e:
-            logger.error(f"Token verification failed: {str(e)}")
+            logger.warning("Token verification failed (%s)", type(e).__name__)
             return None
 
 
+def _record_to_user(record: UserRecord) -> UserInDB:
+    role = record.role if record.role != "user" else "operator"
+    return UserInDB(
+        id=record.id,
+        username=record.username,
+        email=record.email,
+        full_name=record.full_name,
+        hashed_password=record.hashed_password,
+        role=role,
+        disabled=record.disabled,
+        auth_provider=record.auth_provider,
+        created_at=record.created_at or datetime.utcnow(),
+    )
+
+
 class AuthService:
-    """Authentication service"""
-    
     @staticmethod
-    def get_user(username: str) -> Optional[UserInDB]:
-        """Get user from database"""
-        return users_db.get(username)
-    
+    def get_user(username: str, db: Optional[Session] = None) -> Optional[UserInDB]:
+        owns_session = db is None
+        session = db or SessionLocal()
+        try:
+            record = (
+                session.query(UserRecord)
+                .filter(UserRecord.username == username)
+                .one_or_none()
+            )
+            return _record_to_user(record) if record else None
+        finally:
+            if owns_session:
+                session.close()
+
     @staticmethod
-    def authenticate_user(username: str, password: str) -> Optional[UserInDB]:
-        """Authenticate user with username and password"""
-        user = AuthService.get_user(username)
-        if not user:
+    def authenticate_user(username: str, password: str, db: Optional[Session] = None) -> Optional[UserInDB]:
+        user = AuthService.get_user(username, db=db)
+        if not user or not user.hashed_password:
             return None
         if not PasswordHasher.verify_password(password, user.hashed_password):
             return None
         return user
-    
+
     @staticmethod
-    def create_user(user_data: UserCreate) -> UserInDB:
-        """Create new user"""
-        # Check if user already exists
-        if user_data.username in users_db:
-            raise ValueError("Username already exists")
-        
-        # Check if email already exists
-        for user in users_db.values():
-            if user.email == user_data.email:
+    def create_user(user_data: UserCreate, db: Optional[Session] = None) -> UserInDB:
+        owns_session = db is None
+        session = db or SessionLocal()
+        try:
+            if session.query(UserRecord).filter(UserRecord.username == user_data.username).first():
+                raise ValueError("Username already exists")
+            if session.query(UserRecord).filter(UserRecord.email == user_data.email).first():
                 raise ValueError("Email already exists")
-        
-        # Create user
-        hashed_password = PasswordHasher.hash_password(user_data.password)
-        user = UserInDB(
-            username=user_data.username,
-            email=user_data.email,
-            full_name=user_data.full_name,
-            hashed_password=hashed_password,
-            role="user",
-            disabled=False
-        )
-        
-        users_db[user.username] = user
-        logger.info(f"User created: {user.username}")
-        return user
-    
+
+            record = UserRecord(
+                username=user_data.username,
+                email=user_data.email,
+                full_name=user_data.full_name,
+                hashed_password=PasswordHasher.hash_password(user_data.password),
+                role=user_data.role if user_data.role != "user" else "operator",
+                disabled=False,
+                auth_provider="local",
+                created_at=datetime.utcnow(),
+            )
+            session.add(record)
+            session.commit()
+            session.refresh(record)
+            logger.info("User created: %s (role=%s)", record.username, record.role)
+            return _record_to_user(record)
+        finally:
+            if owns_session:
+                session.close()
+
     @staticmethod
     def create_tokens(user: UserInDB) -> Token:
-        """Create access and refresh tokens for user"""
-        access_token = TokenManager.create_access_token(
-            data={"sub": user.username, "role": user.role}
-        )
-        refresh_token = TokenManager.create_refresh_token(
-            data={"sub": user.username, "role": user.role}
-        )
-        
+        claims = {"sub": user.username, "role": user.role, "uid": user.id}
         return Token(
-            access_token=access_token,
-            refresh_token=refresh_token,
-            expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60
+            access_token=TokenManager.create_access_token(data=claims),
+            refresh_token=TokenManager.create_refresh_token(data=claims),
+            expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         )
 
 
 class APIKeyService:
-    """API Key management service"""
-    
     @staticmethod
     def generate_api_key() -> str:
-        """Generate a secure API key"""
         return f"kgpt_{secrets.token_urlsafe(32)}"
-    
+
     @staticmethod
-    def create_api_key(user: str, name: str, expires_days: Optional[int] = None) -> APIKey:
-        """Create new API key for user"""
-        key = APIKeyService.generate_api_key()
-        
-        expires_at = None
-        if expires_days:
-            expires_at = datetime.now() + timedelta(days=expires_days)
-        
-        api_key = APIKey(
-            key=key,
-            name=name,
-            user=user,
-            created_at=datetime.now(),
-            expires_at=expires_at,
-            is_active=True
-        )
-        
-        api_keys_db[key] = api_key
-        logger.info(f"API key created for user: {user}")
-        return api_key
-    
+    def create_api_key(
+        user: str, name: str, expires_days: Optional[int] = None, db: Optional[Session] = None
+    ) -> APIKey:
+        owns_session = db is None
+        session = db or SessionLocal()
+        try:
+            key = APIKeyService.generate_api_key()
+            expires_at = (
+                datetime.utcnow() + timedelta(days=expires_days) if expires_days else None
+            )
+            record = APIKeyRecord(
+                key=key,
+                name=name,
+                username=user,
+                created_at=datetime.utcnow(),
+                expires_at=expires_at,
+                is_active=True,
+            )
+            session.add(record)
+            session.commit()
+            logger.info("API key created for user: %s", user)
+            return APIKey(
+                key=key,
+                name=name,
+                user=user,
+                created_at=record.created_at,
+                expires_at=expires_at,
+                is_active=True,
+            )
+        finally:
+            if owns_session:
+                session.close()
+
     @staticmethod
-    def verify_api_key(key: str) -> Optional[APIKey]:
-        """Verify API key"""
-        api_key = api_keys_db.get(key)
-        
-        if not api_key:
-            return None
-        
-        if not api_key.is_active:
-            return None
-        
-        if api_key.expires_at and datetime.now() > api_key.expires_at:
-            return None
-        
-        return api_key
-    
+    def verify_api_key(key: str, db: Optional[Session] = None) -> Optional[APIKey]:
+        owns_session = db is None
+        session = db or SessionLocal()
+        try:
+            record = session.query(APIKeyRecord).filter(APIKeyRecord.key == key).one_or_none()
+            if not record or not record.is_active:
+                return None
+            if record.expires_at and datetime.utcnow() > record.expires_at:
+                return None
+            return APIKey(
+                key=record.key,
+                name=record.name,
+                user=record.username,
+                created_at=record.created_at,
+                expires_at=record.expires_at,
+                is_active=record.is_active,
+            )
+        finally:
+            if owns_session:
+                session.close()
+
     @staticmethod
-    def revoke_api_key(key: str) -> bool:
-        """Revoke API key"""
-        api_key = api_keys_db.get(key)
-        if api_key:
-            api_key.is_active = False
-            logger.info(f"API key revoked: {key[:10]}...")
+    def revoke_api_key(key: str, db: Optional[Session] = None) -> bool:
+        owns_session = db is None
+        session = db or SessionLocal()
+        try:
+            record = session.query(APIKeyRecord).filter(APIKeyRecord.key == key).one_or_none()
+            if not record:
+                return False
+            record.is_active = False
+            session.commit()
             return True
-        return False
+        finally:
+            if owns_session:
+                session.close()
 
 
-# Dependency functions
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    db: Session = Depends(get_db),
 ) -> UserInDB:
-    """Get current authenticated user from JWT token"""
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
-    
-    token = credentials.credentials
-    token_data = TokenManager.verify_token(token, token_type="access")
-    
+    if credentials is None:
+        raise credentials_exception
+
+    token_data = TokenManager.verify_token(credentials.credentials, token_type="access")
     if token_data is None or token_data.username is None:
         raise credentials_exception
-    
-    user = AuthService.get_user(username=token_data.username)
+
+    user = AuthService.get_user(username=token_data.username, db=db)
     if user is None:
         raise credentials_exception
-    
     if user.disabled:
         raise HTTPException(status_code=400, detail="Inactive user")
-    
     return user
 
 
 async def get_current_active_user(
-    current_user: UserInDB = Depends(get_current_user)
+    current_user: UserInDB = Depends(get_current_user),
 ) -> UserInDB:
-    """Get current active user"""
     if current_user.disabled:
         raise HTTPException(status_code=400, detail="Inactive user")
     return current_user
 
 
+def require_roles(*roles: str) -> Callable:
+    """Dependency factory: allow any of the listed roles."""
+    allowed: Set[str] = set(roles)
+
+    async def _dependency(
+        current_user: UserInDB = Depends(get_current_active_user),
+    ) -> UserInDB:
+        if current_user.role not in allowed:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not enough permissions",
+            )
+        return current_user
+
+    return _dependency
+
+
 async def get_current_admin_user(
-    current_user: UserInDB = Depends(get_current_user)
+    current_user: UserInDB = Depends(require_roles("admin")),
 ) -> UserInDB:
-    """Get current user with admin role"""
-    if current_user.role != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not enough permissions"
-        )
     return current_user
 
 
-async def verify_api_key_header(x_api_key: Optional[str] = Header(None)) -> Optional[str]:
-    """Verify API key from header"""
+async def verify_api_key_header(
+    x_api_key: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+) -> Optional[str]:
     if not x_api_key:
         return None
-    
-    api_key = APIKeyService.verify_api_key(x_api_key)
+    api_key = APIKeyService.verify_api_key(x_api_key, db=db)
     if not api_key:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired API key"
+            detail="Invalid or expired API key",
         )
-    
     return api_key.user
 
 
-def init_default_admin():
-    """Initialize default admin user with secure random password"""
-    if "admin" not in users_db:
-        # Generate secure random password
-        import secrets
-        import string
-        
-        # Generate a 16-character secure password
-        alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
-        default_password = ''.join(secrets.choice(alphabet) for _ in range(16))
-        
-        admin_user = UserInDB(
-            username="admin",
-            email="admin@kaligpt.local",
+def init_default_admin(db: Optional[Session] = None) -> None:
+    """Seed default admin from env if no admin exists."""
+    owns_session = db is None
+    session = db or SessionLocal()
+    try:
+        existing_admin = (
+            session.query(UserRecord).filter(UserRecord.role == "admin").first()
+        )
+        if existing_admin:
+            return
+
+        admin_username = os.getenv("KALIGPT_ADMIN_USERNAME", "admin").strip() or "admin"
+        admin_email = os.getenv("KALIGPT_ADMIN_EMAIL", "admin@example.com").strip()
+        admin_password = os.getenv("KALIGPT_ADMIN_PASSWORD", "")
+        if not admin_password:
+            logger.warning(
+                "Default admin was not initialized; set KALIGPT_ADMIN_PASSWORD "
+                "in the backend environment to enable login."
+            )
+            return
+        if len(admin_password) < 16:
+            raise ValueError("KALIGPT_ADMIN_PASSWORD must be at least 16 characters")
+        _ensure_bcrypt_password_length(
+            admin_password, label="KALIGPT_ADMIN_PASSWORD"
+        )
+
+        record = UserRecord(
+            username=admin_username,
+            email=admin_email,
             full_name="Administrator",
-            hashed_password=PasswordHasher.hash_password(default_password),
+            hashed_password=PasswordHasher.hash_password(admin_password),
             role="admin",
             disabled=False,
-            # Track that password needs to be changed
-            metadata={"password_change_required": True}
+            auth_provider="local",
+            created_at=datetime.utcnow(),
         )
-        users_db["admin"] = admin_user
-        
-        # Log the password securely - only show once at startup
-        logger.critical("=" * 70)
-        logger.critical("DEFAULT ADMIN USER CREATED - SECURE THIS IMMEDIATELY")
-        logger.critical("=" * 70)
-        logger.critical(f"Username: admin")
-        logger.critical(f"Password: {default_password}")
-        logger.critical("=" * 70)
-        logger.critical("⚠️  ACTION REQUIRED: Change this password after first login!")
-        logger.critical("⚠️  This password will NOT be shown again!")
-        logger.critical("=" * 70)
-        
-        # Also print to console for visibility
-        print("\n" + "=" * 70)
-        print("DEFAULT ADMIN USER CREATED - SECURE THIS IMMEDIATELY")
-        print("=" * 70)
-        print(f"Username: admin")
-        print(f"Password: {default_password}")
-        print("=" * 70)
-        print("⚠️  ACTION REQUIRED: Change this password after first login!")
-        print("⚠️  This password will NOT be shown again!")
-        print("=" * 70 + "\n")
+        session.add(record)
+        session.commit()
+        logger.info("Default admin user initialized; password material was not logged.")
+    finally:
+        if owns_session:
+            session.close()

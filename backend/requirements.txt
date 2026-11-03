@@ -22,5 +22,11 @@ bcrypt==4.2.1               # pin to avoid downgrade to vulnerable <4.x
 # Rate limiting
 slowapi==0.1.9
 
+# ── Persistence (SQLite local-first; Postgres via DATABASE_URL) ────────────────
+sqlalchemy==2.0.36
+alembic==1.14.0
+psycopg[binary]==3.2.3
+
 # ── Utilities ─────────────────────────────────────────────────────────────────
 python-dotenv==1.0.1
+requests==2.34.2

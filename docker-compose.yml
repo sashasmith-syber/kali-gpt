@@ -8,16 +8,39 @@ services:
       - "8000:8000"
     volumes:
       - ./backend:/app
-      - /var/run/docker.sock:/var/run/docker.sock
+      - kaligpt-data:/data
     environment:
       - PYTHONUNBUFFERED=1
-      - LLM_PROVIDER=ollama
+      # Override with postgresql+psycopg://… when using --profile team (see .env.example)
+      - DATABASE_URL=${DATABASE_URL:-sqlite:////data/kaligpt.db}
+      - SECRET_KEY=${SECRET_KEY:-change-me-set-a-stable-secret}
+      - KALIGPT_ADMIN_PASSWORD=${KALIGPT_ADMIN_PASSWORD:-}
+      - KALIGPT_ADMIN_USERNAME=${KALIGPT_ADMIN_USERNAME:-admin}
+      - KALIGPT_ADMIN_EMAIL=${KALIGPT_ADMIN_EMAIL:-admin@example.com}
+      - LLM_PROVIDER=${LLM_PROVIDER:-ollama}
       - OLLAMA_HOST=http://ollama:11434
-      - LLM_MODEL=llama3:latest
+      - LM_STUDIO_HOST=${LM_STUDIO_HOST:-http://host.docker.internal:1234}
+      - LLM_MODEL=${LLM_MODEL:-llama3:latest}
+      - LLM_TIMEOUT=${LLM_TIMEOUT:-120}
+      - LLM_CONNECT_TIMEOUT=${LLM_CONNECT_TIMEOUT:-5}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:3000}
+      - ENABLE_DOCKER_SOCK=${ENABLE_DOCKER_SOCK:-false}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - kaligpt-network
     depends_on:
-      - ollama
+      ollama:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+        required: false
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
     restart: unless-stopped
 
   frontend:
@@ -33,7 +56,8 @@ services:
     environment:
       - VITE_API_BASE_URL=http://localhost:8000
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       - kaligpt-network
     restart: unless-stopped
@@ -47,6 +71,34 @@ services:
       - llm-data:/root/.ollama
     networks:
       - kaligpt-network
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+  # Team scale: docker compose --profile team up
+  postgres:
+    profiles: ["team"]
+    image: postgres:16-alpine
+    container_name: kaligpt-postgres
+    environment:
+      POSTGRES_DB: kaligpt
+      POSTGRES_USER: kaligpt
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - kaligpt-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kaligpt -d kaligpt"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
 
 networks:
@@ -55,3 +107,5 @@ networks:
 
 volumes:
   llm-data:
+  kaligpt-data:
+  pg-data:
