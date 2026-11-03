@@ -32,8 +32,14 @@ echo.
 REM Build and start services
 echo [*] Building and starting KALI-GPT services...
 cd /d d:\kali-gpt
-docker-compose down
-docker-compose up -d --build
+if not exist backend\.env (
+    echo [X] backend\.env is missing.
+    echo [*] Copy backend\.env.example to backend\.env, set SECRET_KEY and KALIGPT_ADMIN_PASSWORD, then retry.
+    pause
+    exit /b 1
+)
+docker compose --env-file backend/.env down
+docker compose --env-file backend/.env up -d --build
 
 echo.
 echo [*] Waiting for services to initialize (10 seconds)...
@@ -43,7 +49,7 @@ echo.
 echo ==========================================
 echo DEPLOYMENT STATUS
 echo ==========================================
-docker-compose ps
+docker compose --env-file backend/.env ps
 
 echo.
 echo ==========================================

@@ -5,14 +5,14 @@ JWT auth with persistent users (SQLite/Postgres) and RBAC roles.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Callable, Optional, Set
 import jwt
 from jwt.exceptions import InvalidTokenError as JWTError
 from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status, Header
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, ValidationError, field_validator
 from sqlalchemy.orm import Session
 import os
 import secrets
@@ -30,14 +30,17 @@ from db.models.user import APIKeyRecord, UserRecord, VALID_ROLES
 logger = logging.getLogger(__name__)
 
 _raw_secret = os.getenv("SECRET_KEY", "").strip()
-if _raw_secret:
-    SECRET_KEY = _raw_secret
-else:
-    SECRET_KEY = secrets.token_urlsafe(32)
-    logger.warning(
-        "SECRET_KEY is not set; using an ephemeral key. "
-        "Tokens will invalidate on restart. Set SECRET_KEY in the environment."
+if (
+    len(_raw_secret.encode("utf-8")) < 32
+    or _raw_secret.lower() in {
+        "your-secret-key-here-change-this-in-production",
+        "change-me-set-a-stable-secret",
+    }
+):
+    raise RuntimeError(
+        "Set SECRET_KEY to a deployment-specific value of at least 32 bytes."
     )
+SECRET_KEY = _raw_secret
 
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
@@ -66,6 +69,25 @@ def _ensure_bcrypt_password_length(password: str, *, label: str = "Password") ->
     return password
 
 
+def _validate_username(value: str) -> str:
+    if not value.replace("_", "").replace("-", "").isalnum():
+        raise ValueError("Username must be alphanumeric (with _ or - allowed)")
+    return value
+
+
+def _is_expired(expires_at: datetime, now: Optional[datetime] = None) -> bool:
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    else:
+        expires_at = expires_at.astimezone(timezone.utc)
+    current_time = now or datetime.now(timezone.utc)
+    if current_time.tzinfo is None:
+        current_time = current_time.replace(tzinfo=timezone.utc)
+    else:
+        current_time = current_time.astimezone(timezone.utc)
+    return current_time >= expires_at
+
+
 class User(BaseModel):
     id: Optional[int] = None
     username: str = Field(..., min_length=3, max_length=50)
@@ -79,9 +101,7 @@ class User(BaseModel):
     @field_validator("username")
     @classmethod
     def username_alphanumeric(cls, v: str) -> str:
-        if not v.replace("_", "").replace("-", "").isalnum():
-            raise ValueError("Username must be alphanumeric (with _ or - allowed)")
-        return v
+        return _validate_username(v)
 
     @field_validator("role")
     @classmethod
@@ -105,6 +125,11 @@ class UserCreate(BaseModel):
     password: str = Field(..., min_length=8, max_length=BCRYPT_MAX_PASSWORD_BYTES)
     full_name: Optional[str] = None
     role: str = "operator"
+
+    @field_validator("username")
+    @classmethod
+    def username_alphanumeric(cls, v: str) -> str:
+        return _validate_username(v)
 
     @field_validator("password")
     @classmethod
@@ -274,11 +299,15 @@ class AuthService:
                 auth_provider="local",
                 created_at=datetime.utcnow(),
             )
+            _record_to_user(record)
             session.add(record)
             session.commit()
             session.refresh(record)
             logger.info("User created: %s (role=%s)", record.username, record.role)
             return _record_to_user(record)
+        except Exception:
+            session.rollback()
+            raise
         finally:
             if owns_session:
                 session.close()
@@ -340,7 +369,7 @@ class APIKeyService:
             record = session.query(APIKeyRecord).filter(APIKeyRecord.key == key).one_or_none()
             if not record or not record.is_active:
                 return None
-            if record.expires_at and datetime.utcnow() > record.expires_at:
+            if record.expires_at and _is_expired(record.expires_at):
                 return None
             return APIKey(
                 key=record.key,
@@ -462,23 +491,37 @@ def init_default_admin(db: Optional[Session] = None) -> None:
             return
         if len(admin_password) < 16:
             raise ValueError("KALIGPT_ADMIN_PASSWORD must be at least 16 characters")
-        _ensure_bcrypt_password_length(
-            admin_password, label="KALIGPT_ADMIN_PASSWORD"
-        )
+        try:
+            seed = UserCreate.model_validate({
+                "username": admin_username,
+                "email": admin_email,
+                "password": admin_password,
+                "full_name": "Administrator",
+                "role": "admin",
+            })
+        except ValidationError as error:
+            issues = "; ".join(
+                f"{item['loc'][0]}: {item['msg']}" for item in error.errors()
+            )
+            raise ValueError(f"Invalid admin seed configuration: {issues}") from None
 
         record = UserRecord(
-            username=admin_username,
-            email=admin_email,
-            full_name="Administrator",
-            hashed_password=PasswordHasher.hash_password(admin_password),
-            role="admin",
+            username=seed.username,
+            email=seed.email,
+            full_name=seed.full_name,
+            hashed_password=PasswordHasher.hash_password(seed.password),
+            role=seed.role,
             disabled=False,
             auth_provider="local",
             created_at=datetime.utcnow(),
         )
+        _record_to_user(record)
         session.add(record)
         session.commit()
         logger.info("Default admin user initialized; password material was not logged.")
+    except Exception:
+        session.rollback()
+        raise
     finally:
         if owns_session:
             session.close()

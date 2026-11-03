@@ -38,11 +38,22 @@ cd kali-gpt
 ### Step 2: Start the Application
 
 ```bash
-# Build and start all services
-docker-compose up -d --build
+# Configure a deployment-specific JWT key.
+cp backend/.env.example backend/.env
+python3 -c "import secrets; print(secrets.token_urlsafe(32))"
+# Put the generated value in backend/.env as SECRET_KEY, and set a unique
+# KALIGPT_ADMIN_PASSWORD (16+ characters, upper/lowercase and a digit).
+
+# Build and start; Ollama is optional and is not started by default.
+docker compose --env-file backend/.env up -d --build
 
 # This will take 5-10 minutes on first run
 ```
+
+The default setup starts with authentication and tools available without a local
+LLM. To use Ollama, set `LLM_PROVIDER=ollama` in `backend/.env`, then run
+`docker compose --env-file backend/.env --profile ollama up -d`. To use LM Studio
+without Ollama, set `LLM_PROVIDER=lm_studio` and `LM_STUDIO_HOST` in the same file.
 
 ### Step 3: Access the Application
 
@@ -55,7 +66,7 @@ Open your browser and navigate to:
 
 ```bash
 # Check if containers are running
-docker-compose ps
+docker compose --env-file backend/.env ps
 
 # You should see:
 # kaligpt-backend   running   0.0.0.0:8000->8000/tcp
@@ -89,33 +100,33 @@ curl http://localhost:8000/health
 
 ```bash
 # Stop all services
-docker-compose down
+docker compose --env-file backend/.env down
 
 # Stop and remove all data
-docker-compose down -v
+docker compose --env-file backend/.env down -v
 ```
 
 ## 🔄 Restart the Application
 
 ```bash
 # Start existing containers
-docker-compose start
+docker compose --env-file backend/.env start
 
 # Or rebuild and start
-docker-compose up -d --build
+docker compose --env-file backend/.env up -d --build
 ```
 
 ## 📊 View Logs
 
 ```bash
 # View all logs
-docker-compose logs -f
+docker compose --env-file backend/.env logs -f
 
 # View backend logs only
-docker-compose logs -f backend
+docker compose --env-file backend/.env logs -f backend
 
 # View frontend logs only
-docker-compose logs -f frontend
+docker compose --env-file backend/.env logs -f frontend
 ```
 
 ## 🐛 Common Issues
@@ -144,11 +155,11 @@ newgrp docker
 
 ```bash
 # Check logs for errors
-docker-compose logs
+docker compose --env-file backend/.env logs
 
 # Rebuild from scratch
-docker-compose down -v
-docker-compose up -d --build
+docker compose --env-file backend/.env down -v
+docker compose --env-file backend/.env up -d --build
 ```
 
 ## 🎓 Next Steps
@@ -167,7 +178,7 @@ docker-compose up -d --build
 
 ## 📞 Need Help?
 
-- Check the logs: `docker-compose logs -f`
+- Check the logs: `docker compose --env-file backend/.env logs -f`
 - Review the troubleshooting section in README.md
 - Open an issue on GitHub
 
@@ -179,7 +190,10 @@ docker-compose up -d --build
 cd ~/Desktop
 git clone <your-repo-url> kali-gpt
 cd kali-gpt
-docker-compose up -d --build
+cp backend/.env.example backend/.env
+python3 -c "import secrets; print(secrets.token_urlsafe(32))"
+# Save the generated value as SECRET_KEY in backend/.env.
+docker compose --env-file backend/.env up -d --build
 ```
 
 Then open http://localhost:5173 in your browser! 🚀

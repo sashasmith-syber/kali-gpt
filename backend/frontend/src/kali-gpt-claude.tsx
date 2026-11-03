@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import axios from 'axios';
+import { createSessionGuard } from './session-guard.js';
 
 interface Message {
   id: string;
@@ -45,12 +46,14 @@ const KaliGptClaude: React.FC = () => {
     return saved === 'light' ? 'light' : 'dark';
   });
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const sessionGuard = useRef(createSessionGuard()).current;
+  const loginAttempt = useRef(0);
 
   const api = useMemo(() => {
     const client = axios.create({ baseURL: API_BASE_URL });
     client.interceptors.request.use((config) => {
       const t = localStorage.getItem(TOKEN_KEY);
-      if (t) {
+      if (t && !config.headers.Authorization) {
         config.headers.Authorization = `Bearer ${t}`;
       }
       return config;
@@ -68,12 +71,26 @@ const KaliGptClaude: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    sessionGuard.transition(token);
     if (token) {
-      loadMe();
+      void loadMe();
     } else {
       setAuthUser(null);
     }
   }, [token]);
+
+  useEffect(() => {
+    const handleStorage = (event: StorageEvent) => {
+      if (
+        event.key === TOKEN_KEY &&
+        event.newValue === localStorage.getItem(TOKEN_KEY)
+      ) {
+        changeSession(event.newValue);
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, []);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -91,14 +108,40 @@ const KaliGptClaude: React.FC = () => {
   };
 
   const loadMe = async () => {
+    const request = sessionGuard.begin();
     try {
-      const res = await api.get('/api/auth/me');
+      const res = await api.get('/api/auth/me', {
+        signal: request.signal,
+        headers: { Authorization: 'Bearer ' + token },
+      });
+      if (!request.isCurrent()) return;
       setAuthUser({ username: res.data.username, role: res.data.role });
     } catch {
-      localStorage.removeItem(TOKEN_KEY);
-      setToken(null);
-      setAuthUser(null);
+      if (request.isCurrent()) {
+        changeSession(null);
+      }
+    } finally {
+      request.finish();
     }
+  };
+
+  const changeSession = (nextToken: string | null) => {
+    loginAttempt.current += 1;
+    sessionGuard.transition(nextToken);
+    if (nextToken) {
+      localStorage.setItem(TOKEN_KEY, nextToken);
+    } else {
+      localStorage.removeItem(TOKEN_KEY);
+    }
+    setToken(nextToken);
+    setAuthUser(null);
+    setMessages([]);
+    setInput('');
+    setSecurityContext({});
+    setLoading(false);
+    setUsername('');
+    setPassword('');
+    setLoginError('');
   };
 
   const formatLoginDetail = (detail: unknown): string => {
@@ -117,24 +160,25 @@ const KaliGptClaude: React.FC = () => {
 
   const login = async (e: React.FormEvent) => {
     e.preventDefault();
+    const attempt = ++loginAttempt.current;
     setLoginError('');
     try {
       const res = await axios.post(`${API_BASE_URL}/api/auth/login`, {
         username,
         password,
       });
-      localStorage.setItem(TOKEN_KEY, res.data.access_token);
-      setToken(res.data.access_token);
-      setPassword('');
+      if (attempt === loginAttempt.current) {
+        changeSession(res.data.access_token);
+      }
     } catch (err: any) {
-      setLoginError(formatLoginDetail(err.response?.data?.detail) || 'Login failed');
+      if (attempt === loginAttempt.current) {
+        setLoginError(formatLoginDetail(err.response?.data?.detail) || 'Login failed');
+      }
     }
   };
 
   const logout = () => {
-    localStorage.removeItem(TOKEN_KEY);
-    setToken(null);
-    setAuthUser(null);
+    changeSession(null);
   };
 
   const sendMessage = async () => {
@@ -150,13 +194,18 @@ const KaliGptClaude: React.FC = () => {
     setMessages((prev) => [...prev, userMessage]);
     setInput('');
     setLoading(true);
+    const sessionRequest = sessionGuard.begin();
 
     try {
       const response = await api.post('/api/chat', {
         message: userMessage.content,
         context: securityContext,
         history: messages.slice(-5),
+      }, {
+        signal: sessionRequest.signal,
+        headers: { Authorization: 'Bearer ' + token },
       });
+      if (!sessionRequest.isCurrent()) return;
 
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -170,6 +219,7 @@ const KaliGptClaude: React.FC = () => {
         setLlmStatus('down');
       }
     } catch (error: any) {
+      if (!sessionRequest.isCurrent()) return;
       const detail = error.response?.data?.detail || error.message;
       setMessages((prev) => [
         ...prev,
@@ -181,17 +231,24 @@ const KaliGptClaude: React.FC = () => {
         },
       ]);
     } finally {
-      setLoading(false);
+      sessionRequest.finish();
+      if (sessionRequest.isCurrent()) setLoading(false);
     }
   };
 
   const executeCommand = async (command: string) => {
+    if (!token) return;
     setLoading(true);
+    const sessionRequest = sessionGuard.begin();
     try {
       const response = await api.post('/api/execute', {
         command,
         context: securityContext,
+      }, {
+        signal: sessionRequest.signal,
+        headers: { Authorization: 'Bearer ' + token },
       });
+      if (!sessionRequest.isCurrent()) return;
       setMessages((prev) => [
         ...prev,
         {
@@ -202,6 +259,7 @@ const KaliGptClaude: React.FC = () => {
         },
       ]);
     } catch (error: any) {
+      if (!sessionRequest.isCurrent()) return;
       setMessages((prev) => [
         ...prev,
         {
@@ -212,7 +270,8 @@ const KaliGptClaude: React.FC = () => {
         },
       ]);
     } finally {
-      setLoading(false);
+      sessionRequest.finish();
+      if (sessionRequest.isCurrent()) setLoading(false);
     }
   };
 

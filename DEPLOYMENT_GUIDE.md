@@ -124,19 +124,60 @@ cd ~/Desktop
 git clone <repository-url> kali-gpt
 cd kali-gpt
 
-# Build and start services
-docker-compose up -d --build
+# Configure a unique deployment secret and optional admin seed.
+cp backend/.env.example backend/.env
+python3 -c "import secrets; print(secrets.token_urlsafe(32))"
+# Put the generated value in backend/.env as SECRET_KEY; set a strong
+# KALIGPT_ADMIN_PASSWORD there if you want an admin seeded on first startup.
+
+# Build and start services using the same backend environment for Compose
+# interpolation and the backend container.
+docker compose --env-file backend/.env up -d --build
 
 # Check status
-docker-compose ps
+docker compose --env-file backend/.env ps
 
 # View logs
-docker-compose logs -f
+docker compose --env-file backend/.env logs -f
 
 # Access application
 # Frontend: http://localhost:5173
 # Backend: http://localhost:8000/docs
 ```
+
+The backend environment file is used both by Compose interpolation and the
+backend container. Always pass `--env-file backend/.env`; Compose does not use a
+service's `env_file` for interpolation. Admin seed values are not overridden
+with empty Compose variables. The default SQLite database is persisted in the
+`kaligpt-data` volume. The default `LLM_PROVIDER=none` allows authentication and
+tools to start without Ollama. Ollama is optional: set `LLM_PROVIDER=ollama` in
+`backend/.env` and start it with
+`docker compose --env-file backend/.env --profile ollama up -d`. LM Studio can
+be used without starting Ollama by setting `LLM_PROVIDER=lm_studio` and
+`LM_STUDIO_HOST` in `backend/.env`.
+
+For the team profile, set a unique `DB_PASSWORD` and an explicit
+`DATABASE_URL=postgresql+psycopg://kaligpt:<URL-encoded-password>@postgres:5432/kaligpt`
+in `backend/.env`, then run:
+
+```bash
+docker compose --env-file backend/.env --profile team up -d --build
+```
+
+PostgreSQL is reachable only from the Compose network by default; no host port is
+published. Do not start the team profile without setting `DB_PASSWORD`.
+
+Migrations run automatically before the backend seeds the admin. Back up the
+SQLite volume or PostgreSQL database before upgrades; to back out, stop the
+deployment, restore the pre-upgrade backup, and redeploy the previous image.
+Do not downgrade a production schema without reviewing the migration's
+downgrade behavior.
+
+Deployments that previously used the public JWT signing-key fallback must
+manually set a new deployment-specific `SECRET_KEY` and restart the backend.
+This invalidates existing JWTs; also review access/audit records and rotate
+administrator passwords and API keys if the instance may have been exposed.
+No live secrets are changed by this guide.
 
 ### Method 2: Manual Installation
 
@@ -492,10 +533,10 @@ sudo ufw status
 
 ```bash
 # Backend logs
-docker-compose logs backend
+docker compose --env-file backend/.env logs backend
 
 # Frontend logs
-docker-compose logs frontend
+docker compose --env-file backend/.env logs frontend
 
 # System logs
 sudo journalctl -u kaligpt-backend -f
@@ -514,8 +555,8 @@ tail -f /var/log/kaligpt/app.log
 sudo apt update && sudo apt upgrade -y
 
 # Update Docker images
-docker-compose pull
-docker-compose up -d
+docker compose --env-file backend/.env pull
+docker compose --env-file backend/.env up -d
 
 # Update Node packages
 cd frontend && npm update

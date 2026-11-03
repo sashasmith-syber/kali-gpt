@@ -3,6 +3,13 @@ Author: sashasmith-syber
 
 Desktop Defender is a local-first desktop security application using Electron + React (UI) and a Python FastAPI local agent for defensive monitoring and containment hooks.
 
+Electron stores its configuration, including the agent token, in the
+user-specific application data directory. On POSIX systems the application
+creates/restricts that directory to owner-only access and writes its config
+atomically with owner-only permissions. Node/Electron's `chmod` does not enforce
+Windows ACLs; Windows deployments must ensure the user-data directory inherits
+an ACL that grants access only to the intended Windows account and administrators.
+
 ## Security Scope
 
 This project is strictly defensive:
