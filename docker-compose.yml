@@ -9,29 +9,26 @@ services:
     volumes:
       - ./backend:/app
       - kaligpt-data:/data
+    env_file:
+      - path: ${BACKEND_ENV_FILE:-./backend/.env}
+        required: false
     environment:
-      - PYTHONUNBUFFERED=1
-      # Override with postgresql+psycopg://… when using --profile team (see .env.example)
-      - DATABASE_URL=${DATABASE_URL:-sqlite:////data/kaligpt.db}
-      - SECRET_KEY=${SECRET_KEY:-change-me-set-a-stable-secret}
-      - KALIGPT_ADMIN_PASSWORD=${KALIGPT_ADMIN_PASSWORD:-}
-      - KALIGPT_ADMIN_USERNAME=${KALIGPT_ADMIN_USERNAME:-admin}
-      - KALIGPT_ADMIN_EMAIL=${KALIGPT_ADMIN_EMAIL:-admin@example.com}
-      - LLM_PROVIDER=${LLM_PROVIDER:-ollama}
-      - OLLAMA_HOST=http://ollama:11434
-      - LM_STUDIO_HOST=${LM_STUDIO_HOST:-http://host.docker.internal:1234}
-      - LLM_MODEL=${LLM_MODEL:-llama3:latest}
-      - LLM_TIMEOUT=${LLM_TIMEOUT:-120}
-      - LLM_CONNECT_TIMEOUT=${LLM_CONNECT_TIMEOUT:-5}
-      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:3000}
-      - ENABLE_DOCKER_SOCK=${ENABLE_DOCKER_SOCK:-false}
+      PYTHONUNBUFFERED: "1"
+      DATABASE_URL: ${DATABASE_URL:-sqlite:////data/kaligpt.db}
+      SECRET_KEY: ${SECRET_KEY:?Set a deployment-specific SECRET_KEY in backend/.env}
+      LLM_PROVIDER: ${LLM_PROVIDER:-none}
+      OLLAMA_HOST: ${OLLAMA_HOST:-http://ollama:11434}
+      LM_STUDIO_HOST: ${LM_STUDIO_HOST:-http://host.docker.internal:1234}
+      LLM_MODEL: ${LLM_MODEL:-llama3:latest}
+      LLM_TIMEOUT: ${LLM_TIMEOUT:-120}
+      LLM_CONNECT_TIMEOUT: ${LLM_CONNECT_TIMEOUT:-5}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:3000}
+      ENABLE_DOCKER_SOCK: ${ENABLE_DOCKER_SOCK:-false}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
       - kaligpt-network
     depends_on:
-      ollama:
-        condition: service_healthy
       postgres:
         condition: service_healthy
         required: false
@@ -63,6 +60,7 @@ services:
     restart: unless-stopped
 
   ollama:
+    profiles: ["ollama"]
     image: ollama/ollama
     container_name: kaligpt-ollama
     ports:
@@ -87,11 +85,9 @@ services:
     environment:
       POSTGRES_DB: kaligpt
       POSTGRES_USER: kaligpt
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-}
     volumes:
       - pg-data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
     networks:
       - kaligpt-network
     healthcheck:

@@ -50,8 +50,8 @@ module.exports = {
         },
         // Custom Tokyo Noir colors
         acid: {
-          DEFAULT: "hsl(100, 100%, 55%)",
-          glow: "hsl(100, 100%, 55%, 0.5)",
+          DEFAULT: "hsl(var(--acid-green))",
+          glow: "hsl(var(--acid-green) / 0.5)",
         },
         reaper: {
           DEFAULT: "hsl(348, 100%, 50%)",

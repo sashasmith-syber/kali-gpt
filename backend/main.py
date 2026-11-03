@@ -64,6 +64,20 @@ logger = logging.getLogger(__name__)
 
 llm_service = LLMService()
 net_reaper = get_net_reaper_service()
+_llm_probe_slots = asyncio.Semaphore(2)
+_llm_generation_slots = asyncio.Semaphore(4)
+
+
+async def _run_llm_probe(probe):
+    async with _llm_probe_slots:
+        return await asyncio.to_thread(probe)
+
+
+async def _run_llm_generation(prompt, history):
+    async with _llm_generation_slots:
+        return await asyncio.to_thread(
+            llm_service.generate_response, prompt, history
+        )
 
 
 def _load_llm_settings_from_db() -> None:
@@ -188,8 +202,7 @@ class LLMConfigUpdate(BaseModel):
 
 @app.get("/health")
 async def health_check():
-    # Probe off the event loop; LLM health uses a short timeout (see llm.py)
-    llm = await asyncio.to_thread(llm_service.health)
+    llm = await _run_llm_probe(llm_service.health)
     return {
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
@@ -267,7 +280,7 @@ async def chat(
     current_user: UserInDB = Depends(require_roles("admin", "operator", "viewer")),
 ):
     try:
-        logger.info("Chat request from %s: %s...", current_user.username, request.message[:100])
+        logger.info("Chat request received from %s", current_user.username)
         history_formatted = [
             {"role": msg.role, "content": msg.content} for msg in request.history
         ]
@@ -280,7 +293,7 @@ User Question: {request.message}
 
 Based on the context, provide a helpful and safe response. If a command is relevant, suggest one.
 """
-        llm_response = llm_service.generate_response(prompt, history_formatted)
+        llm_response = await _run_llm_generation(prompt, history_formatted)
         if llm_response.error:
             # Graceful degradation — still 200 so UI can continue
             return ChatResponse(
@@ -292,7 +305,7 @@ Based on the context, provide a helpful and safe response. If a command is relev
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("Error in chat endpoint: %s", str(e), exc_info=True)
+        logger.error("Error in chat endpoint (%s)", type(e).__name__)
         raise HTTPException(status_code=500, detail="Chat request failed")
 
 
@@ -306,9 +319,8 @@ async def execute_command(
 ):
     try:
         logger.info(
-            "Execute request from user %s: %s",
+            "Execute request received from user %s",
             current_user.username,
-            execute_req.command,
         )
 
         if not execute_req.context.authorization:
@@ -375,7 +387,7 @@ async def execute_command(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("Error in execute endpoint: %s", str(e))
+        logger.error("Error in execute endpoint (%s)", type(e).__name__)
         raise HTTPException(status_code=500, detail="Execution error")
 
 
@@ -398,14 +410,15 @@ async def get_tool_info_endpoint(
 async def llm_health(
     _user: UserInDB = Depends(require_roles("admin", "operator", "viewer")),
 ):
-    return llm_service.health()
+    return await _run_llm_probe(llm_service.health)
 
 
 @app.get("/api/llm/models")
 async def llm_models(
     _user: UserInDB = Depends(require_roles("admin", "operator")),
 ):
-    return {"models": llm_service.list_models(), "current": (
+    models = await _run_llm_probe(llm_service.list_models)
+    return {"models": models, "current": (
         llm_service.provider.config.model if llm_service.provider else None
     )}
 
@@ -446,7 +459,7 @@ async def llm_config_update(
         _save_llm_setting("llm.host", resolved.host)
         _save_llm_setting("llm.model", resolved.model)
 
-    health = await asyncio.to_thread(llm_service.health)
+    health = await _run_llm_probe(llm_service.health)
     return {"success": True, "health": health.model_dump()}
 
 
@@ -569,7 +582,7 @@ async def net_reaper_process_threat(
             },
         }
     except Exception as e:
-        logger.error("Failed to process threat: %s", str(e))
+        logger.error("Failed to process threat (%s)", type(e).__name__)
         raise HTTPException(status_code=500, detail="Failed to process threat")
 
 

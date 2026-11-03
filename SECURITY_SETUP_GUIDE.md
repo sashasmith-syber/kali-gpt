@@ -9,43 +9,29 @@ This guide provides instructions for securely configuring the KaliGPT backend an
 ### 1. Backend Admin Password (KaliGPT)
 
 **What Changed:**
-- The hardcoded default admin password `"Admin@123"` has been removed
-- A cryptographically secure random password is now generated on first startup
-- The password is displayed **only once** in the console and logs
+- An admin is seeded only when `KALIGPT_ADMIN_PASSWORD` is configured.
+- The backend no longer generates or logs an admin password.
+- Seed username, email, and password are validated before the account is saved.
 
 **Setup Instructions:**
 
-1. **Start the backend server:**
+1. **Create and configure the backend environment file:**
    ```bash
-   cd backend
-   python main.py
+   cp backend/.env.example backend/.env
+   python -c "import secrets; print(secrets.token_urlsafe(32))"
+   ```
+   Set the generated value as `SECRET_KEY`, and set `KALIGPT_ADMIN_PASSWORD`
+   to a unique password of at least 16 characters, with uppercase, lowercase,
+   and a digit, and no more than 72 UTF-8 bytes.
+
+2. **Start KaliGPT using the configured environment:**
+   ```bash
+   docker compose --env-file backend/.env up -d --build
    ```
 
-2. **Look for the password in the console output:**
-   ```
-   ======================================================================
-   DEFAULT ADMIN USER CREATED - SECURE THIS IMMEDIATELY
-   ======================================================================
-   Username: admin
-   Password: xK9#mP2$vL5@nQ8!
-   ======================================================================
-   ⚠️  ACTION REQUIRED: Change this password after first login!
-   ⚠️  This password will NOT be shown again!
-   ======================================================================
-   ```
-
-3. **Save the password securely** (password manager, encrypted file, etc.)
-
-4. **Login and change the password immediately:**
-   - Use the `/api/login` endpoint or web interface
-   - Login with username `admin` and the generated password
-   - Navigate to user settings
-   - Change to a strong, unique password
-
-5. **If you lose the password:**
-   - Restart the backend with `RESET_ADMIN=true` environment variable
-   - This will regenerate a new admin password
-   - **Warning:** This will reset any admin user data
+3. If no admin seed password is configured, the backend starts without seeding
+   an admin. Set it in `backend/.env` and restart to seed one; invalid seed
+   configuration stops startup without creating a partial account.
 
 ### 2. Desktop Defender Agent Token
 
@@ -143,14 +129,16 @@ Rate limiting is enabled to prevent abuse:
 
 ```bash
 # Required
-SECRET_KEY=<generate with: python -c "import secrets; print(secrets.token_urlsafe(32))">
+# Generate with: python -c "import secrets; print(secrets.token_urlsafe(32))"
+SECRET_KEY=
 ALLOWED_ORIGINS=https://yourdomain.com,https://admin.yourdomain.com
 
 # Optional
 LOG_LEVEL=INFO
 LOG_FILE=kaligpt.log
 MAX_COMMAND_TIMEOUT=300
-LLM_PROVIDER=ollama
+# Set to "ollama" or "lm_studio" only when using a local LLM.
+LLM_PROVIDER=none
 OLLAMA_HOST=http://localhost:11434
 ```
 
@@ -163,7 +151,7 @@ DESKTOP_DEFENDER_AGENT_TOKEN=dd_your_token_here
 
 ## Security Checklist
 
-- [ ] Backend admin password changed from default
+- [ ] Admin seed password is unique and deployment-specific, if an admin was seeded
 - [ ] Desktop Defender agent token configured in Electron app
 - [ ] Environment variables set for production
 - [ ] TLS/SSL configured for production
@@ -183,7 +171,7 @@ DESKTOP_DEFENDER_AGENT_TOKEN=dd_your_token_here
 ### "Could not validate credentials" error
 - Verify you're using the correct admin password
 - Check that the backend is running
-- If password is lost, restart with `RESET_ADMIN=true`
+- If the admin password is lost, use the application's documented account recovery procedure; no default password reset flag is provided.
 
 ### Security warnings persist
 - Ensure all configuration is saved

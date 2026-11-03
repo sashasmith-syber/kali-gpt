@@ -4,6 +4,7 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import axios from "axios";
+import { createPolicyRevision } from "./policy-revision.mjs";
 
 const DEFAULT_POLICIES = {
   mode: "alert",
@@ -56,11 +57,13 @@ function App() {
   const [tab, setTab] = useState("incidents");
   // Keep unsaved form edits across 15s polls / in-flight refreshAll.
   const policiesDirtyRef = useRef(false);
+  const policyRevision = useRef(createPolicyRevision()).current;
 
   const online = health?.status === "healthy";
   const bridge = Boolean(window.desktopDefender?.agentRequest);
 
   function updatePolicies(next) {
+    policyRevision.edit();
     policiesDirtyRef.current = true;
     setPolicies(next);
   }
@@ -123,12 +126,18 @@ function App() {
   }
 
   async function savePolicies() {
+    const submittedRevision = policyRevision.capture();
+    const submittedPolicies = policies;
     setBusy(true);
     try {
-      await api(config, { method: "POST", path: "/policy", body: policies });
-      policiesDirtyRef.current = false;
-      setMessage(`Policy set to ${policies.mode}.`);
-      await refreshAll();
+      await api(config, { method: "POST", path: "/policy", body: submittedPolicies });
+      if (policyRevision.isCurrent(submittedRevision)) {
+        policiesDirtyRef.current = false;
+        setMessage(`Policy set to ${submittedPolicies.mode}.`);
+        await refreshAll();
+      } else {
+        setMessage("Policy saved; newer edits remain unsaved.");
+      }
     } catch (err) {
       setMessage(`Policy update failed: ${err.response?.data?.detail || err.message}`);
     } finally {

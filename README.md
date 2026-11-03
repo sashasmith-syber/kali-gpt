@@ -67,15 +67,29 @@ KaliGPT is an AI-powered penetration testing assistant designed specifically for
 
 2. **Build and start containers**
 
-   Make sure Docker Desktop is running, then run the following command from the project's root directory (`kali-gpt`).
+   Make sure Docker Desktop is running. Configure the required deployment
+   secret first; the example file contains no usable secret.
+
    ```bash
-   docker-compose up -d --build
+   cp backend/.env.example backend/.env
+   python3 -c "import secrets; print(secrets.token_urlsafe(32))"
+   # Save the generated value as SECRET_KEY and set a unique
+   # KALIGPT_ADMIN_PASSWORD in backend/.env for first-login admin seeding.
+   docker compose --env-file backend/.env up -d --build
    ```
 
-3. **Pull a model with Ollama**
+3. **Optionally enable Ollama**
+
+   By default, authentication and tools work without a local LLM. To use Ollama,
+   set `LLM_PROVIDER=ollama` in `backend/.env` and start the optional profile:
+
    ```bash
-   docker-compose exec ollama ollama pull llama3
+   docker compose --env-file backend/.env --profile ollama up -d
+   docker compose --env-file backend/.env --profile ollama exec ollama ollama pull llama3
    ```
+
+   For LM Studio without Ollama, set `LLM_PROVIDER=lm_studio` and
+   `LM_STUDIO_HOST` in `backend/.env`.
 
 4. **Access the application**
 - Frontend: http://localhost:5173
@@ -255,8 +269,8 @@ pip install -r requirements.txt --force-reinstall
 
 **Problem**: LLM not responding
 - Verify `LLM_PROVIDER` and `OLLAMA_HOST` in `.env` are correct.
-- Check Ollama container logs: `docker-compose logs ollama`
-- Ensure you have pulled a model: `docker-compose exec ollama ollama pull llama3`
+- For Ollama, set `LLM_PROVIDER=ollama` and start the `ollama` profile as described above.
+- Pull a model with `docker compose --env-file backend/.env --profile ollama exec ollama ollama pull llama3`.
 
 ### Frontend Issues
 
@@ -278,7 +292,7 @@ node --version  # Should be 20+
 docker system prune -a
 
 # Rebuild without cache
-docker-compose build --no-cache
+docker compose --env-file backend/.env build --no-cache
 ```
 
 ## 🦊 GitLab CI/CD Integration
@@ -318,8 +332,8 @@ This pipeline stage will ensure the Net Reaper defense system and all integrated
 git pull origin main
 
 # Rebuild containers
-docker-compose down
-docker-compose up -d --build
+docker compose --env-file backend/.env down
+docker compose --env-file backend/.env up -d --build
 ```
 
 ## 🗺️ Roadmap

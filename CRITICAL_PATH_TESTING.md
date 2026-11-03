@@ -1,5 +1,16 @@
 # Critical-Path Testing & Activation Plan
 
+## Foundation smoke setup
+
+Install the declared test dependencies (including HTTPX, required by FastAPI's
+`TestClient`) and run the smoke check:
+
+```bash
+python -m pip install -r backend/requirements-test.txt
+python scripts/foundation_smoke.py
+python -m pytest backend/tests
+```
+
 ## Phase 1: Critical-Path Testing ✅ COMPLETE
 
 **Status:** ALL TESTS PASSED (2026-03-06T00:16:33)

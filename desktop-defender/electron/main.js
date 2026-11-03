@@ -5,6 +5,7 @@
 const { app, BrowserWindow, ipcMain } = require("electron");
 const fs = require("fs");
 const path = require("path");
+const { readSecureConfig, writeSecureConfig } = require("./config-storage");
 
 const CONFIG_FILE = () => path.join(app.getPath("userData"), "desktop-defender-config.json");
 
@@ -25,7 +26,7 @@ function readTokenFile() {
 function readConfig() {
   let cfg = { ...DEFAULT_CONFIG };
   try {
-    const raw = fs.readFileSync(CONFIG_FILE(), "utf8");
+    const raw = readSecureConfig(CONFIG_FILE());
     cfg = { ...cfg, ...JSON.parse(raw) };
   } catch {
     // first run
@@ -37,9 +38,7 @@ function readConfig() {
 }
 
 function writeConfig(next) {
-  const dir = path.dirname(CONFIG_FILE());
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(CONFIG_FILE(), JSON.stringify(next, null, 2), "utf8");
+  writeSecureConfig(CONFIG_FILE(), JSON.stringify(next, null, 2));
 }
 
 const AGENT_REQUEST_TIMEOUT_MS = 8000;

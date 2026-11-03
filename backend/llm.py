@@ -15,7 +15,7 @@ from typing import List, Optional, Dict, Any
 
 logger = logging.getLogger(__name__)
 
-LLM_PROVIDER = os.getenv("LLM_PROVIDER", "ollama")
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "none")
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://host.docker.internal:11434")
 LM_STUDIO_HOST = os.getenv("LM_STUDIO_HOST", "http://host.docker.internal:1234")
 LLM_MODEL = os.getenv("LLM_MODEL", "llama3:latest")
@@ -76,7 +76,13 @@ class LLMProvider:
 
     def _health_timeout(self):
         # Keep /health under Compose's 10s probe; do not use generate timeouts.
-        return (min(self.config.connect_timeout, 2), 3)
+        return (max(0.1, min(self.config.connect_timeout, 2)), 3)
+
+    def _discovery_timeout(self):
+        return (
+            max(0.1, min(self.config.connect_timeout, 2)),
+            max(0.1, min(self.config.timeout, 5)),
+        )
 
 
 class OllamaProvider(LLMProvider):
@@ -146,7 +152,7 @@ class OllamaProvider(LLMProvider):
             )
 
     def list_models(self) -> List[str]:
-        response = self.session.get(self.tags_url, timeout=self._timeout())
+        response = self.session.get(self.tags_url, timeout=self._discovery_timeout())
         response.raise_for_status()
         models = response.json().get("models", [])
         return [m.get("name", "") for m in models if m.get("name")]
@@ -225,7 +231,7 @@ class LMStudioProvider(LLMProvider):
             )
 
     def list_models(self) -> List[str]:
-        response = self.session.get(self.models_url, timeout=self._timeout())
+        response = self.session.get(self.models_url, timeout=self._discovery_timeout())
         response.raise_for_status()
         data = response.json().get("data", [])
         return [m.get("id", "") for m in data if m.get("id")]
@@ -267,7 +273,7 @@ def build_provider(
             host=host or OLLAMA_HOST,
             model=model or LLM_MODEL,
         )
-        logger.info("Using Ollama provider model=%s host=%s", config.model, config.host)
+        logger.info("Using Ollama provider model=%s", config.model)
         return OllamaProvider(config)
     if name == "lm_studio":
         config = LLMConfig(
@@ -275,7 +281,7 @@ def build_provider(
             host=host or LM_STUDIO_HOST,
             model=model or LLM_MODEL or "local-model",
         )
-        logger.info("Using LM Studio provider model=%s host=%s", config.model, config.host)
+        logger.info("Using LM Studio provider model=%s", config.model)
         return LMStudioProvider(config)
     logger.warning("No valid LLM_PROVIDER configured. LLM features will be disabled.")
     return None

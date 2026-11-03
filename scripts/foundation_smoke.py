@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Foundation smoke: migrate/init DB, seed admin, login, LLM health, chat without LLM."""
+"""Foundation smoke; install backend/requirements-test.txt before running."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ sys.path.insert(0, str(BACKEND))
 smoke_dir = Path(tempfile.mkdtemp(prefix="kaligpt-smoke-"))
 db_path = smoke_dir / "kaligpt.db"
 os.environ["DATABASE_URL"] = f"sqlite:///{db_path.as_posix()}"
-os.environ["SECRET_KEY"] = "foundation-smoke-secret-key-32b"
+os.environ["SECRET_KEY"] = "foundation-smoke-secret-key-at-least-32-bytes"
 os.environ["KALIGPT_ADMIN_PASSWORD"] = "FoundationSmokePass1!"
 os.environ["KALIGPT_ADMIN_USERNAME"] = "admin"
 os.environ["LLM_PROVIDER"] = "ollama"
