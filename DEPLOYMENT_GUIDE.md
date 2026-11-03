@@ -105,13 +105,12 @@ sudo sh get-docker.sh
 sudo usermod -aG docker $USER
 newgrp docker
 
-# Install Docker Compose
-sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-sudo chmod +x /usr/local/bin/docker-compose
+# Install Docker Compose plugin
+sudo apt-get install docker-compose-plugin
 
 # Verify installations
 docker --version
-docker-compose --version
+docker compose version
 ```
 
 ## 🚀 Installation Methods
@@ -124,14 +123,15 @@ cd ~/Desktop
 git clone <repository-url> kali-gpt
 cd kali-gpt
 
+# Copy backend/.env.example to backend/.env and set SECRET_KEY and KALIGPT_ADMIN_PASSWORD
 # Build and start services
-docker-compose up -d --build
+docker compose --env-file backend/.env up -d --build
 
 # Check status
-docker-compose ps
+docker compose --env-file backend/.env ps
 
 # View logs
-docker-compose logs -f
+docker compose --env-file backend/.env logs -f
 
 # Access application
 # Frontend: http://localhost:5173
@@ -492,10 +492,10 @@ sudo ufw status
 
 ```bash
 # Backend logs
-docker-compose logs backend
+docker compose --env-file backend/.env logs backend
 
 # Frontend logs
-docker-compose logs frontend
+docker compose --env-file backend/.env logs frontend
 
 # System logs
 sudo journalctl -u kaligpt-backend -f
@@ -514,8 +514,8 @@ tail -f /var/log/kaligpt/app.log
 sudo apt update && sudo apt upgrade -y
 
 # Update Docker images
-docker-compose pull
-docker-compose up -d
+docker compose --env-file backend/.env pull
+docker compose --env-file backend/.env up -d
 
 # Update Node packages
 cd frontend && npm update

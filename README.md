@@ -67,14 +67,14 @@ KaliGPT is an AI-powered penetration testing assistant designed specifically for
 
 2. **Build and start containers**
 
-   Make sure Docker Desktop is running, then run the following command from the project's root directory (`kali-gpt`).
+   Copy `backend/.env.example` to `backend/.env`, generate a unique `SECRET_KEY`, and set a strong `KALIGPT_ADMIN_PASSWORD`. Make sure Docker Desktop is running, then run the following command from the project's root directory (`kali-gpt`).
    ```bash
-   docker-compose up -d --build
+   docker compose --env-file backend/.env up -d --build
    ```
 
 3. **Pull a model with Ollama**
    ```bash
-   docker-compose exec ollama ollama pull llama3
+   docker compose --env-file backend/.env exec ollama ollama pull llama3
    ```
 
 4. **Access the application**
@@ -255,8 +255,8 @@ pip install -r requirements.txt --force-reinstall
 
 **Problem**: LLM not responding
 - Verify `LLM_PROVIDER` and `OLLAMA_HOST` in `.env` are correct.
-- Check Ollama container logs: `docker-compose logs ollama`
-- Ensure you have pulled a model: `docker-compose exec ollama ollama pull llama3`
+- Check Ollama container logs: `docker compose --env-file backend/.env logs ollama`
+- Ensure you have pulled a model: `docker compose --env-file backend/.env exec ollama ollama pull llama3`
 
 ### Frontend Issues
 
@@ -278,7 +278,7 @@ node --version  # Should be 20+
 docker system prune -a
 
 # Rebuild without cache
-docker-compose build --no-cache
+docker compose --env-file backend/.env build --no-cache
 ```
 
 ## 🦊 GitLab CI/CD Integration
@@ -318,8 +318,8 @@ This pipeline stage will ensure the Net Reaper defense system and all integrated
 git pull origin main
 
 # Rebuild containers
-docker-compose down
-docker-compose up -d --build
+docker compose --env-file backend/.env down
+docker compose --env-file backend/.env up -d --build
 ```
 
 ## 🗺️ Roadmap

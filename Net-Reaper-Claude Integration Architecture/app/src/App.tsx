@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTheme } from 'next-themes';
 import { cn } from '@/lib/utils';
 import { Sidebar, type ViewType } from '@/components/Sidebar';
 import { Overview } from '@/components/Overview';
@@ -8,10 +9,12 @@ import { SpiderControl } from '@/components/SpiderControl';
 import { SettingsPanel } from '@/components/SettingsPanel';
 import { Toaster } from '@/components/ui/sonner';
 import { getBackendClient } from '@/backend-client';
+import { Button } from '@/components/ui/button';
 
 function App() {
   const [currentView, setCurrentView] = useState<ViewType>('overview');
   const [isLoading, setIsLoading] = useState(true);
+  const { theme, setTheme } = useTheme();
 
   // Initialize backend client
   useEffect(() => {
@@ -87,15 +90,24 @@ function App() {
               
               {/* Status Indicators */}
               <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="text-xs"
+                  onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                >
+                  {theme === 'dark' ? 'Light' : 'Dark'}
+                </Button>
+                <div className="hidden sm:flex items-center gap-2">
                   <span className="status-indicator status-live" />
                   <span className="text-xs text-muted-foreground">Live</span>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="hidden md:flex items-center gap-2">
                   <span className="status-indicator status-live" />
                   <span className="text-xs text-muted-foreground">Curve25519</span>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="hidden lg:flex items-center gap-2">
                   <span className="status-indicator status-live" />
                   <span className="text-xs text-muted-foreground">K2 Active</span>
                 </div>

@@ -235,7 +235,7 @@ Pre-configured with 10+ popular Kali tools:
 ### Option 1: Docker (Recommended)
 
 ```bash
-docker-compose up -d --build
+docker compose --env-file backend/.env up -d --build
 ```
 
 - Easiest setup

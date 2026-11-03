@@ -7,7 +7,7 @@ Get KaliGPT running in your Kali Linux VM in under 10 minutes!
 ```bash
 # Check if you have the required tools
 docker --version          # Should be 20.10+
-docker-compose --version  # Should be 2.0+
+docker compose version   # Should be 2.24+
 git --version            # Any recent version
 ```
 
@@ -20,9 +20,9 @@ sudo sh get-docker.sh
 sudo usermod -aG docker $USER
 newgrp docker
 
-# Install Docker Compose
-sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-sudo chmod +x /usr/local/bin/docker-compose
+# Install Docker Compose plugin
+sudo apt-get update
+sudo apt-get install docker-compose-plugin
 ```
 
 ## 📥 Installation (3 Steps)
@@ -38,8 +38,9 @@ cd kali-gpt
 ### Step 2: Start the Application
 
 ```bash
+# Copy backend/.env.example to backend/.env and set SECRET_KEY and KALIGPT_ADMIN_PASSWORD first.
 # Build and start all services
-docker-compose up -d --build
+docker compose --env-file backend/.env up -d --build
 
 # This will take 5-10 minutes on first run
 ```
@@ -55,7 +56,7 @@ Open your browser and navigate to:
 
 ```bash
 # Check if containers are running
-docker-compose ps
+docker compose --env-file backend/.env ps
 
 # You should see:
 # kaligpt-backend   running   0.0.0.0:8000->8000/tcp
@@ -89,33 +90,33 @@ curl http://localhost:8000/health
 
 ```bash
 # Stop all services
-docker-compose down
+docker compose --env-file backend/.env down
 
 # Stop and remove all data
-docker-compose down -v
+docker compose --env-file backend/.env down -v
 ```
 
 ## 🔄 Restart the Application
 
 ```bash
 # Start existing containers
-docker-compose start
+docker compose --env-file backend/.env start
 
 # Or rebuild and start
-docker-compose up -d --build
+docker compose --env-file backend/.env up -d --build
 ```
 
 ## 📊 View Logs
 
 ```bash
 # View all logs
-docker-compose logs -f
+docker compose --env-file backend/.env logs -f
 
 # View backend logs only
-docker-compose logs -f backend
+docker compose --env-file backend/.env logs -f backend
 
 # View frontend logs only
-docker-compose logs -f frontend
+docker compose --env-file backend/.env logs -f frontend
 ```
 
 ## 🐛 Common Issues
@@ -144,11 +145,11 @@ newgrp docker
 
 ```bash
 # Check logs for errors
-docker-compose logs
+docker compose --env-file backend/.env logs
 
 # Rebuild from scratch
-docker-compose down -v
-docker-compose up -d --build
+docker compose --env-file backend/.env down -v
+docker compose --env-file backend/.env up -d --build
 ```
 
 ## 🎓 Next Steps
@@ -167,7 +168,7 @@ docker-compose up -d --build
 
 ## 📞 Need Help?
 
-- Check the logs: `docker-compose logs -f`
+- Check the logs: `docker compose --env-file backend/.env logs -f`
 - Review the troubleshooting section in README.md
 - Open an issue on GitHub
 
@@ -179,7 +180,9 @@ docker-compose up -d --build
 cd ~/Desktop
 git clone <your-repo-url> kali-gpt
 cd kali-gpt
-docker-compose up -d --build
+cp backend/.env.example backend/.env
+# Set SECRET_KEY and KALIGPT_ADMIN_PASSWORD in backend/.env before running:
+docker compose --env-file backend/.env up -d --build
 ```
 
 Then open http://localhost:5173 in your browser! 🚀
