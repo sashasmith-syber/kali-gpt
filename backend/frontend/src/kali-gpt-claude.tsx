@@ -45,6 +45,7 @@ const KaliGptClaude: React.FC = () => {
     return saved === 'light' ? 'light' : 'dark';
   });
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const sessionIdRef = useRef(0);
 
   const api = useMemo(() => {
     const client = axios.create({ baseURL: API_BASE_URL });
@@ -91,13 +92,21 @@ const KaliGptClaude: React.FC = () => {
   };
 
   const loadMe = async () => {
+    const sessionId = sessionIdRef.current;
     try {
       const res = await api.get('/api/auth/me');
+      if (sessionId !== sessionIdRef.current) return;
       setAuthUser({ username: res.data.username, role: res.data.role });
     } catch {
+      if (sessionId !== sessionIdRef.current) return;
       localStorage.removeItem(TOKEN_KEY);
+      sessionIdRef.current += 1;
       setToken(null);
       setAuthUser(null);
+      setMessages([]);
+      setInput('');
+      setSecurityContext({});
+      setLoading(false);
     }
   };
 
@@ -124,6 +133,11 @@ const KaliGptClaude: React.FC = () => {
         password,
       });
       localStorage.setItem(TOKEN_KEY, res.data.access_token);
+      sessionIdRef.current += 1;
+      setMessages([]);
+      setInput('');
+      setSecurityContext({});
+      setLoading(false);
       setToken(res.data.access_token);
       setPassword('');
     } catch (err: any) {
@@ -133,12 +147,18 @@ const KaliGptClaude: React.FC = () => {
 
   const logout = () => {
     localStorage.removeItem(TOKEN_KEY);
+    sessionIdRef.current += 1;
     setToken(null);
     setAuthUser(null);
+    setMessages([]);
+    setInput('');
+    setSecurityContext({});
+    setLoading(false);
   };
 
   const sendMessage = async () => {
     if (!input.trim() || loading || !token) return;
+    const sessionId = sessionIdRef.current;
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -157,6 +177,7 @@ const KaliGptClaude: React.FC = () => {
         context: securityContext,
         history: messages.slice(-5),
       });
+      if (sessionId !== sessionIdRef.current) return;
 
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -170,6 +191,7 @@ const KaliGptClaude: React.FC = () => {
         setLlmStatus('down');
       }
     } catch (error: any) {
+      if (sessionId !== sessionIdRef.current) return;
       const detail = error.response?.data?.detail || error.message;
       setMessages((prev) => [
         ...prev,
@@ -181,17 +203,20 @@ const KaliGptClaude: React.FC = () => {
         },
       ]);
     } finally {
-      setLoading(false);
+      if (sessionId === sessionIdRef.current) setLoading(false);
     }
   };
 
   const executeCommand = async (command: string) => {
+    if (!token) return;
+    const sessionId = sessionIdRef.current;
     setLoading(true);
     try {
       const response = await api.post('/api/execute', {
         command,
         context: securityContext,
       });
+      if (sessionId !== sessionIdRef.current) return;
       setMessages((prev) => [
         ...prev,
         {
@@ -202,6 +227,7 @@ const KaliGptClaude: React.FC = () => {
         },
       ]);
     } catch (error: any) {
+      if (sessionId !== sessionIdRef.current) return;
       setMessages((prev) => [
         ...prev,
         {
@@ -212,7 +238,7 @@ const KaliGptClaude: React.FC = () => {
         },
       ]);
     } finally {
-      setLoading(false);
+      if (sessionId === sessionIdRef.current) setLoading(false);
     }
   };
 

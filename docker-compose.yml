@@ -9,14 +9,14 @@ services:
     volumes:
       - ./backend:/app
       - kaligpt-data:/data
+    env_file:
+      - path: ./backend/.env
+        required: false
     environment:
       - PYTHONUNBUFFERED=1
       # Override with postgresql+psycopg://… when using --profile team (see .env.example)
       - DATABASE_URL=${DATABASE_URL:-sqlite:////data/kaligpt.db}
-      - SECRET_KEY=${SECRET_KEY:-change-me-set-a-stable-secret}
-      - KALIGPT_ADMIN_PASSWORD=${KALIGPT_ADMIN_PASSWORD:-}
-      - KALIGPT_ADMIN_USERNAME=${KALIGPT_ADMIN_USERNAME:-admin}
-      - KALIGPT_ADMIN_EMAIL=${KALIGPT_ADMIN_EMAIL:-admin@example.com}
+      - SECRET_KEY=${SECRET_KEY:?Set SECRET_KEY in backend/.env or the Compose environment}
       - LLM_PROVIDER=${LLM_PROVIDER:-ollama}
       - OLLAMA_HOST=http://ollama:11434
       - LM_STUDIO_HOST=${LM_STUDIO_HOST:-http://host.docker.internal:1234}
@@ -88,7 +88,7 @@ services:
     environment:
       POSTGRES_DB: kaligpt
       POSTGRES_USER: kaligpt
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-}
     volumes:
       - pg-data:/var/lib/postgresql/data
     ports:

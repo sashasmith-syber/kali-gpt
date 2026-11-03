@@ -106,6 +106,13 @@ class UserCreate(BaseModel):
     full_name: Optional[str] = None
     role: str = "operator"
 
+    @field_validator("username")
+    @classmethod
+    def username_alphanumeric(cls, v: str) -> str:
+        if not v.replace("_", "").replace("-", "").isalnum():
+            raise ValueError("Username must be alphanumeric (with _ or - allowed)")
+        return v
+
     @field_validator("password")
     @classmethod
     def password_strength(cls, v: str) -> str:
@@ -340,8 +347,14 @@ class APIKeyService:
             record = session.query(APIKeyRecord).filter(APIKeyRecord.key == key).one_or_none()
             if not record or not record.is_active:
                 return None
-            if record.expires_at and datetime.utcnow() > record.expires_at:
-                return None
+            if record.expires_at:
+                now = (
+                    datetime.now(record.expires_at.tzinfo)
+                    if record.expires_at.tzinfo
+                    else datetime.utcnow()
+                )
+                if now > record.expires_at:
+                    return None
             return APIKey(
                 key=record.key,
                 name=record.name,
@@ -476,6 +489,7 @@ def init_default_admin(db: Optional[Session] = None) -> None:
             auth_provider="local",
             created_at=datetime.utcnow(),
         )
+        _record_to_user(record)
         session.add(record)
         session.commit()
         logger.info("Default admin user initialized; password material was not logged.")

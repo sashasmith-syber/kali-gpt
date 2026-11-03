@@ -7,7 +7,12 @@ import os
 from pathlib import Path
 from typing import Generator
 
+from alembic.autogenerate import compare_metadata
+from alembic import command
+from alembic.config import Config
+from alembic.migration import MigrationContext
 from sqlalchemy import create_engine, event
+from sqlalchemy import inspect
 from sqlalchemy.orm import Session, sessionmaker
 
 logger = logging.getLogger(__name__)
@@ -63,10 +68,31 @@ def get_db() -> Generator[Session, None, None]:
 
 
 def init_db() -> None:
-    """Create tables if missing (Alembic remains source of truth for migrations)."""
-    from db import models  # noqa: F401
-    from db.base import Base
+    """Apply schema migrations and baseline matching legacy schemas."""
+    database_url = _database_url()
+    _ensure_sqlite_parent(database_url)
+    config_path = Path(__file__).resolve().parents[1] / "alembic.ini"
+    config = Config(str(config_path))
+    config.set_main_option(
+        "script_location", str(config_path.parent / "alembic")
+    )
+    config.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))
 
-    _ensure_sqlite_parent(_database_url())
-    Base.metadata.create_all(bind=engine)
+    tables = set(inspect(engine).get_table_names())
+    if "users" in tables and "alembic_version" not in tables:
+        from db import models  # noqa: F401
+        from db.base import Base
+
+        with engine.connect() as connection:
+            differences = compare_metadata(
+                MigrationContext.configure(connection), Base.metadata
+            )
+        if differences:
+            raise RuntimeError(
+                "Existing database schema does not match the application models; "
+                "refusing to baseline it."
+            )
+        command.stamp(config, "head")
+
+    command.upgrade(config, "head")
     logger.info("Database initialized (%s)", _database_url().split("://")[0])

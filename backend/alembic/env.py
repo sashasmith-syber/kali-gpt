@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from logging.config import fileConfig
 
 from alembic import context
 from sqlalchemy import engine_from_config, pool
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 from db.base import Base
 from db import models  # noqa: F401
@@ -18,7 +22,7 @@ target_metadata = Base.metadata
 
 database_url = os.getenv("DATABASE_URL", config.get_main_option("sqlalchemy.url"))
 if database_url:
-    config.set_main_option("sqlalchemy.url", database_url)
+    config.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))
 
 
 def run_migrations_offline() -> None:

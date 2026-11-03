@@ -120,8 +120,8 @@
   }
   
   .status-live {
-    @apply bg-[hsl(100,100%,55%)];
-    box-shadow: 0 0 10px hsl(100 100% 55% / 0.8);
+    @apply bg-[hsl(var(--acid-green))];
+    box-shadow: 0 0 10px hsl(var(--acid-green) / 0.8);
     animation: pulse-live 1.5s ease-in-out infinite;
   }
   
@@ -139,7 +139,7 @@
 
 @layer utilities {
   .text-acid {
-    color: hsl(100 100% 55%);
+    color: hsl(var(--acid-green));
   }
   
   .text-reaper {
@@ -147,7 +147,7 @@
   }
   
   .bg-acid {
-    background-color: hsl(100 100% 55%);
+    background-color: hsl(var(--acid-green));
   }
   
   .bg-reaper {
@@ -155,11 +155,11 @@
   }
   
   .border-acid {
-    border-color: hsl(100 100% 55%);
+    border-color: hsl(var(--acid-green));
   }
   
   .glow-acid {
-    box-shadow: 0 0 20px hsl(100 100% 55% / 0.5);
+    box-shadow: 0 0 20px hsl(var(--acid-green) / 0.5);
   }
   
   .glow-reaper {

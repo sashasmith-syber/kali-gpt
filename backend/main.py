@@ -398,14 +398,15 @@ async def get_tool_info_endpoint(
 async def llm_health(
     _user: UserInDB = Depends(require_roles("admin", "operator", "viewer")),
 ):
-    return llm_service.health()
+    return await asyncio.to_thread(llm_service.health)
 
 
 @app.get("/api/llm/models")
 async def llm_models(
     _user: UserInDB = Depends(require_roles("admin", "operator")),
 ):
-    return {"models": llm_service.list_models(), "current": (
+    models = await asyncio.to_thread(llm_service.list_models)
+    return {"models": models, "current": (
         llm_service.provider.config.model if llm_service.provider else None
     )}
 

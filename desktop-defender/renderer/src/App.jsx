@@ -56,11 +56,13 @@ function App() {
   const [tab, setTab] = useState("incidents");
   // Keep unsaved form edits across 15s polls / in-flight refreshAll.
   const policiesDirtyRef = useRef(false);
+  const policyRevisionRef = useRef(0);
 
   const online = health?.status === "healthy";
   const bridge = Boolean(window.desktopDefender?.agentRequest);
 
   function updatePolicies(next) {
+    policyRevisionRef.current += 1;
     policiesDirtyRef.current = true;
     setPolicies(next);
   }
@@ -123,11 +125,15 @@ function App() {
   }
 
   async function savePolicies() {
+    const submittedPolicies = policies;
+    const submittedRevision = policyRevisionRef.current;
     setBusy(true);
     try {
-      await api(config, { method: "POST", path: "/policy", body: policies });
-      policiesDirtyRef.current = false;
-      setMessage(`Policy set to ${policies.mode}.`);
+      await api(config, { method: "POST", path: "/policy", body: submittedPolicies });
+      if (policyRevisionRef.current === submittedRevision) {
+        policiesDirtyRef.current = false;
+      }
+      setMessage(`Policy set to ${submittedPolicies.mode}.`);
       await refreshAll();
     } catch (err) {
       setMessage(`Policy update failed: ${err.response?.data?.detail || err.message}`);

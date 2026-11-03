@@ -38,8 +38,18 @@ function readConfig() {
 
 function writeConfig(next) {
   const dir = path.dirname(CONFIG_FILE());
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(CONFIG_FILE(), JSON.stringify(next, null, 2), "utf8");
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  fs.chmodSync(dir, 0o700);
+  try {
+    fs.chmodSync(CONFIG_FILE(), 0o600);
+  } catch (err) {
+    if (err.code !== "ENOENT") throw err;
+  }
+  fs.writeFileSync(CONFIG_FILE(), JSON.stringify(next, null, 2), {
+    encoding: "utf8",
+    mode: 0o600
+  });
+  fs.chmodSync(CONFIG_FILE(), 0o600);
 }
 
 const AGENT_REQUEST_TIMEOUT_MS = 8000;

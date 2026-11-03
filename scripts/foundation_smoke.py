@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Foundation smoke: migrate/init DB, seed admin, login, LLM health, chat without LLM."""
+"""Smoke check: install backend/requirements.txt, then verify auth, migrations, LLM, and chat."""
 
 from __future__ import annotations
 

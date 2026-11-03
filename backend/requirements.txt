@@ -30,3 +30,5 @@ psycopg[binary]==3.2.3
 # ── Utilities ─────────────────────────────────────────────────────────────────
 python-dotenv==1.0.1
 requests==2.34.2
+# FastAPI TestClient dependency for scripts/foundation_smoke.py
+httpx==0.28.1

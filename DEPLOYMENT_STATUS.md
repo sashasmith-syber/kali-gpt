@@ -123,12 +123,12 @@ Given yesterday's attack attempt, the following immediate defensive measures hav
    ```
    Or manually:
    ```batch
-   docker-compose up -d --build
+   docker compose --env-file backend/.env up -d --build
    ```
 
 3. **Pull LLM Model**
    ```batch
-   docker-compose exec ollama ollama pull llama3
+   docker compose --env-file backend/.env exec ollama ollama pull llama3
    ```
 
 4. **Verify Services**
