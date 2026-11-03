@@ -31,7 +31,8 @@ services:
       - kaligpt-network
     depends_on:
       ollama:
-        condition: service_healthy
+        condition: service_started
+        required: false
       postgres:
         condition: service_healthy
         required: false
