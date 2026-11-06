@@ -1,0 +1,7 @@
+node_modules/
+dist/
+verification-shots/
+*.log
+.DS_Store
+public/wallpapers/
+public/fonts/

@@ -1,0 +1,23 @@
+{
+  "name": "kaligpt-neon-archive",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Interactive 3D cyberpunk wallpaper archive with parallax and 4K scene capture",
+  "type": "module",
+  "scripts": {
+    "predev": "node scripts/decode-assets.mjs",
+    "dev": "vite",
+    "prebuild": "node scripts/decode-assets.mjs",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0"
+  },
+  "dependencies": {
+    "three": "^0.180.0"
+  },
+  "devDependencies": {
+    "vite": "^7.2.2"
+  },
+  "engines": {
+    "node": ">=20.19"
+  }
+}
