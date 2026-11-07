@@ -25,7 +25,7 @@ on:
   push:
     branches: ["blackboxai/security-audit-fixes", "main"]
   pull_request:
-    branches: ["main"]
+    branches: ["main", "feature/foundation=new0ne"]
   schedule:
     # Run full scan nightly at 02:00 UTC
     - cron: "0 2 * * *"
