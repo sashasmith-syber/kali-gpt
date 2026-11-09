@@ -38,7 +38,10 @@ function App() {
     (async () => {
       if (window.desktopDefender?.getConfig) {
         const saved = await window.desktopDefender.getConfig();
-        setConfig(saved);
+        setConfig({
+          agentBaseUrl: saved.agentBaseUrl || "http://127.0.0.1:8787",
+          agentToken: saved.agentToken || ""
+        });
         // Check if token is configured
         if (!saved.agentToken) {
           setSecurityWarning("⚠️ Security Warning: Agent token not configured. Please set a secure token to connect to the agent.");
@@ -72,7 +75,14 @@ function App() {
 
   async function saveConfig() {
     try {
-      await window.desktopDefender?.setConfig(config);
+      const payload = { agentBaseUrl: config.agentBaseUrl };
+      if (config.agentToken) payload.agentToken = config.agentToken;
+      const result = await window.desktopDefender?.setConfig(payload);
+      if (result && result.ok === false) {
+        setMessage(`Save config failed: ${result.error}`);
+        return;
+      }
+      setSecurityWarning(config.agentToken ? "" : securityWarning);
       setMessage("Local configuration saved.");
     } catch (err) {
       setMessage(`Save config failed: ${err.message}`);
@@ -121,6 +131,8 @@ function App() {
         />
         <label>Agent Token</label>
         <input
+          type="password"
+          autoComplete="off"
           value={config.agentToken}
           onChange={(e) => setConfig({ ...config, agentToken: e.target.value })}
         />
