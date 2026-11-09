@@ -6,13 +6,12 @@
   "scripts": {
     "dev": "concurrently \"npm:dev:renderer\" \"npm:dev:electron\"",
     "dev:renderer": "vite --config renderer/vite.config.js",
-    "dev:electron": "wait-on tcp:5174 && cross-env ELECTRON_START_URL=http://localhost:5174 electron .",
+    "dev:electron": "wait-on tcp:127.0.0.1:5174 && cross-env ELECTRON_START_URL=http://127.0.0.1:5174 electron .",
     "build:renderer": "vite build --config renderer/vite.config.js",
     "start": "electron ."
   },
   "dependencies": {
     "axios": "^1.7.9",
-    "electron-store": "^11.0.2",
     "react": "^19.2.5",
     "react-dom": "^19.2.5"
   },

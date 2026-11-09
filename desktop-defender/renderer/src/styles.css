@@ -4,100 +4,326 @@
  */
 :root {
   color-scheme: dark;
-  --bg: #0d1117;
-  --card: #161b22;
-  --text: #e6edf3;
-  --muted: #9da7b3;
-  --accent: #2f81f7;
-  --danger: #da3633;
+  --bg0: #070a0e;
+  --bg1: #0b0f14;
+  --panel: #121821;
+  --line: #243041;
+  --text: #e8eef6;
+  --muted: #8b9bb0;
+  --accent: #3d9cfd;
+  --accent-2: #1f6feb;
+  --ok: #3fb950;
+  --warn: #d29922;
+  --danger: #f85149;
+  --shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+  font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
 }
 
 * {
   box-sizing: border-box;
-  font-family: Inter, Segoe UI, Arial, sans-serif;
 }
 
 body {
   margin: 0;
-  background: var(--bg);
+  min-height: 100vh;
   color: var(--text);
+  background:
+    radial-gradient(1200px 500px at 10% -10%, rgba(61, 156, 253, 0.16), transparent 55%),
+    radial-gradient(900px 400px at 100% 0%, rgba(63, 185, 80, 0.08), transparent 50%),
+    linear-gradient(180deg, var(--bg1), var(--bg0));
 }
 
-.layout {
-  max-width: 1000px;
+.shell {
+  max-width: 1180px;
   margin: 0 auto;
-  padding: 20px;
-  display: grid;
-  gap: 16px;
+  padding: 28px 24px 40px;
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.eyebrow {
+  margin: 0 0 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 0.72rem;
+  color: var(--muted);
 }
 
 h1 {
-  margin-bottom: 0;
+  margin: 0;
+  font-size: 2rem;
+  letter-spacing: -0.03em;
 }
 
-.author {
+.lede {
+  margin: 10px 0 22px;
   color: var(--muted);
-  margin-top: 0;
+  max-width: 52ch;
 }
 
-.card {
-  background: var(--card);
-  border: 1px solid #30363d;
-  border-radius: 12px;
-  padding: 16px;
-}
-
-.row {
+.topbar-meta {
   display: flex;
-  gap: 10px;
-  margin-top: 10px;
-  margin-bottom: 10px;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.pill {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 0.82rem;
+  background: rgba(18, 24, 33, 0.85);
+}
+
+.pill.ok {
+  border-color: rgba(63, 185, 80, 0.45);
+  color: var(--ok);
+}
+
+.pill.bad {
+  border-color: rgba(248, 81, 73, 0.45);
+  color: var(--danger);
+}
+
+.pill.muted {
+  color: var(--muted);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.panel {
+  background: color-mix(in srgb, var(--panel) 92%, black);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 18px;
+  box-shadow: var(--shadow);
+}
+
+.span-2 {
+  grid-column: 1 / -1;
+}
+
+.panel h2 {
+  margin: 0 0 12px;
+  font-size: 1.05rem;
 }
 
 label {
   display: block;
-  margin-top: 10px;
-  margin-bottom: 4px;
+  margin: 10px 0 6px;
   color: var(--muted);
+  font-size: 0.86rem;
 }
 
 .checkbox {
   display: flex;
   gap: 10px;
   align-items: center;
-  margin-top: 8px;
+  margin-top: 10px;
+  color: var(--text);
 }
 
 input,
 select,
-button {
-  border-radius: 8px;
-  border: 1px solid #30363d;
-  background: #0d1117;
+button,
+textarea {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: #0a1018;
   color: var(--text);
-  padding: 10px;
+  padding: 10px 12px;
+  font: inherit;
+}
+
+.token-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+
+.row {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+
+.row > * {
+  width: auto;
 }
 
 button {
   cursor: pointer;
-  background: var(--accent);
+  background: linear-gradient(180deg, var(--accent), var(--accent-2));
   border: none;
   color: white;
-  font-weight: 600;
+  font-weight: 650;
 }
 
-button:hover {
-  opacity: 0.92;
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
-pre {
-  background: #010409;
-  border: 1px solid #30363d;
-  border-radius: 8px;
-  padding: 10px;
+button.secondary {
+  background: #182230;
+  border: 1px solid var(--line);
+}
+
+button.ghost {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--text);
+  width: auto;
+}
+
+button.danger {
+  background: linear-gradient(180deg, #ff6b63, var(--danger));
+}
+
+button:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+.hint {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.hint.warn {
+  color: var(--warn);
+}
+
+code {
+  font-family: "IBM Plex Mono", Consolas, monospace;
+  font-size: 0.85em;
+}
+
+.contain {
+  border-color: rgba(248, 81, 73, 0.35);
+}
+
+.contain-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.tab {
+  width: auto;
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+
+.tab.active {
+  color: var(--text);
+  border-color: rgba(61, 156, 253, 0.55);
+  background: rgba(61, 156, 253, 0.12);
+}
+
+.list {
+  display: grid;
+  gap: 10px;
+  max-height: 420px;
   overflow: auto;
 }
 
-.status {
-  border-left: 4px solid var(--accent);
+.list-item {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px;
+  background: #0a1018;
+}
+
+.list-item p {
+  margin: 8px 0 0;
+}
+
+.list-head {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.list-head time {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.sev {
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+}
+
+.sev-high {
+  color: var(--danger);
+  border-color: rgba(248, 81, 73, 0.5);
+}
+
+.sev-med {
+  color: var(--warn);
+  border-color: rgba(210, 153, 34, 0.5);
+}
+
+.sev-low {
+  color: var(--ok);
+  border-color: rgba(63, 185, 80, 0.5);
+}
+
+.empty {
+  color: var(--muted);
+  margin: 8px 0;
+}
+
+pre {
+  margin: 8px 0 0;
+  overflow: auto;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.status-bar {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border-left: 3px solid var(--accent);
+  background: rgba(18, 24, 33, 0.9);
+  border-radius: 0 12px 12px 0;
+  color: var(--text);
+}
+
+@media (max-width: 900px) {
+  .grid,
+  .contain-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .span-2 {
+    grid-column: auto;
+  }
 }
