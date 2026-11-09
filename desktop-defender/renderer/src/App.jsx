@@ -67,11 +67,18 @@ function App() {
 
   useEffect(() => {
     (async () => {
-      if (!window.desktopDefender?.getConfig) return;
-      const saved = await window.desktopDefender.getConfig();
-      setConfig((prev) => ({ ...prev, ...saved }));
-      if (!saved?.agentToken) {
-        setMessage("Agent token missing — paste from ~/.desktop-defender-agent-token");
+      if (window.desktopDefender?.getConfig) {
+        const saved = await window.desktopDefender.getConfig();
+        setConfig({
+          agentBaseUrl: saved.agentBaseUrl || "http://127.0.0.1:8787",
+          agentToken: saved.agentToken || ""
+        });
+        // Check if token is configured
+        if (!saved.agentToken) {
+          setSecurityWarning("⚠️ Security Warning: Agent token not configured. Please set a secure token to connect to the agent.");
+        } else {
+          setSecurityWarning("");
+        }
       }
     })();
   }, []);
@@ -114,7 +121,14 @@ function App() {
 
   async function saveConfig() {
     try {
-      await window.desktopDefender?.setConfig(config);
+      const payload = { agentBaseUrl: config.agentBaseUrl };
+      if (config.agentToken) payload.agentToken = config.agentToken;
+      const result = await window.desktopDefender?.setConfig(payload);
+      if (result && result.ok === false) {
+        setMessage(`Save config failed: ${result.error}`);
+        return;
+      }
+      setSecurityWarning(config.agentToken ? "" : securityWarning);
       setMessage("Local configuration saved.");
       await refreshAll();
     } catch (err) {
@@ -192,21 +206,36 @@ function App() {
   }
 
   return (
-    <div className="shell">
-      <header className="topbar">
-        <div>
-          <p className="eyebrow">Local defensive control</p>
-          <h1>Desktop Defender</h1>
-        </div>
-        <div className="topbar-meta">
-          <span className={`pill ${online ? "ok" : "bad"}`}>
-            {online ? "Agent online" : "Agent offline"}
-          </span>
-          <span className="pill muted">mode: {health.policy_mode || policies.mode}</span>
-          <span className="pill muted">incidents: {health.incident_count ?? incidents.length}</span>
-          <button type="button" className="ghost" disabled={busy} onClick={refreshAll}>
-            Refresh
-          </button>
+    <div className="layout">
+      <h1>Desktop Defender</h1>
+      <p className="author">Author: sashasmith-syber</p>
+      
+      {securityWarning && (
+        <section className="card" style={{backgroundColor: '#fff3cd', border: '1px solid #ffc107', color: '#856404'}}>
+          <p style={{margin: 0, fontWeight: 'bold'}}>{securityWarning}</p>
+          <p style={{margin: '8px 0 0 0', fontSize: '0.9em'}}>
+            The agent token can be found in the agent startup logs or ~/.desktop-defender-agent-token
+          </p>
+        </section>
+      )}
+
+      <section className="card">
+        <h2>Agent Connection</h2>
+        <label>Agent Base URL</label>
+        <input
+          value={config.agentBaseUrl}
+          onChange={(e) => setConfig({ ...config, agentBaseUrl: e.target.value })}
+        />
+        <label>Agent Token</label>
+        <input
+          type="password"
+          autoComplete="off"
+          value={config.agentToken}
+          onChange={(e) => setConfig({ ...config, agentToken: e.target.value })}
+        />
+        <div className="row">
+          <button onClick={saveConfig}>Save Config</button>
+          <button onClick={refreshHealth}>Check Health</button>
         </div>
       </header>
 

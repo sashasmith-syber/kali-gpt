@@ -108,6 +108,33 @@ async function agentRequest({ method = "GET", path: apiPath = "/", body = null }
   }
 }
 
+function isTrustedUrl(url) {
+  try {
+    const u = new URL(url);
+    if (u.protocol === "file:") return true;
+    const startUrl = process.env.ELECTRON_START_URL;
+    return Boolean(startUrl) && u.origin === new URL(startUrl).origin;
+  } catch {
+    return false;
+  }
+}
+
+function isTrustedSender(event) {
+  return Boolean(event.senderFrame) && isTrustedUrl(event.senderFrame.url);
+}
+
+function isLoopbackHttpUrl(value) {
+  try {
+    const u = new URL(value);
+    return (
+      (u.protocol === "http:" || u.protocol === "https:") &&
+      ["127.0.0.1", "localhost", "[::1]"].includes(u.hostname)
+    );
+  } catch {
+    return false;
+  }
+}
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 1280,
@@ -124,6 +151,12 @@ function createWindow() {
     }
   });
 
+  // Block navigation away from the app and deny all new windows
+  win.webContents.on("will-navigate", (event, url) => {
+    if (!isTrustedUrl(url)) event.preventDefault();
+  });
+  win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+
   const startUrl = process.env.ELECTRON_START_URL;
   if (startUrl) {
     win.loadURL(startUrl);
@@ -135,16 +168,29 @@ function createWindow() {
 app.whenReady().then(() => {
   createWindow();
 
-  ipcMain.handle("config:get", async () => readConfig());
-
-  ipcMain.handle("config:set", async (_event, payload) => {
-    const current = readConfig();
-    const next = {
-      agentBaseUrl: payload?.agentBaseUrl || current.agentBaseUrl,
-      agentToken:
-        typeof payload?.agentToken === "string" ? payload.agentToken : current.agentToken
+  ipcMain.handle("config:get", async (event) => {
+    if (!isTrustedSender(event)) throw new Error("Untrusted IPC sender");
+    return {
+      agentBaseUrl: store.get("agentBaseUrl"),
+      agentToken: store.get("agentToken")
     };
-    writeConfig(next);
+  });
+
+  ipcMain.handle("config:set", async (event, payload) => {
+    if (!isTrustedSender(event)) throw new Error("Untrusted IPC sender");
+    if (!payload || typeof payload !== "object") return { ok: false, error: "Invalid payload" };
+    if (payload.agentBaseUrl !== undefined) {
+      if (typeof payload.agentBaseUrl !== "string" || !isLoopbackHttpUrl(payload.agentBaseUrl)) {
+        return { ok: false, error: "agentBaseUrl must be a local http(s) URL" };
+      }
+      store.set("agentBaseUrl", payload.agentBaseUrl);
+    }
+    if (payload.agentToken !== undefined) {
+      if (typeof payload.agentToken !== "string" || payload.agentToken.length === 0 || payload.agentToken.length > 512) {
+        return { ok: false, error: "Invalid agentToken" };
+      }
+      store.set("agentToken", payload.agentToken);
+    }
     return { ok: true };
   });
 
