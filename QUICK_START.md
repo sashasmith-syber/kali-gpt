@@ -25,7 +25,7 @@ sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-
 sudo chmod +x /usr/local/bin/docker-compose
 ```
 
-## 📥 Installation (3 Steps)
+## 📥 Installation (4 Steps)
 
 ### Step 1: Clone the Repository
 
@@ -35,7 +35,15 @@ git clone <your-repo-url> kali-gpt
 cd kali-gpt
 ```
 
-### Step 2: Start the Application
+### Step 2: Configure the initial admin login
+
+```bash
+cp backend/.env.example backend/.env
+```
+
+Edit `backend/.env` and set `KALIGPT_ADMIN_PASSWORD` to a unique password of at least 16 characters. Keep this local file private and do not commit it.
+
+### Step 3: Start the Application
 
 ```bash
 # Build and start all services
@@ -44,7 +52,7 @@ docker-compose up -d --build
 # This will take 5-10 minutes on first run
 ```
 
-### Step 3: Access the Application
+### Step 4: Access the Application
 
 Open your browser and navigate to:
 
@@ -69,7 +77,7 @@ curl http://localhost:8000/health
 
 ## 🎯 First Use
 
-1. **Open the application** at http://localhost:5173
+1. **Open the application** at http://localhost:5173 and sign in as `admin` with the password configured in `backend/.env`.
 
 2. **Set Security Context** (top bar):
 

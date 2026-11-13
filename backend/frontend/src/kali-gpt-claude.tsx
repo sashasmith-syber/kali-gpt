@@ -28,6 +28,11 @@ const KaliGptClaude: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [loginUsername, setLoginUsername] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [authError, setAuthError] = useState('');
+  const [authLoading, setAuthLoading] = useState(false);
   const [securityContext, setSecurityContext] = useState<SecurityContext>({});
   const [apiStatus, setApiStatus] = useState<'connected' | 'disconnected' | 'checking'>('checking');
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -53,8 +58,27 @@ const KaliGptClaude: React.FC = () => {
     }
   };
 
+  const login = async () => {
+    if (!loginUsername.trim() || !loginPassword || authLoading) return;
+
+    setAuthLoading(true);
+    setAuthError('');
+    try {
+      const response = await axios.post(`${API_BASE_URL}/api/auth/login`, {
+        username: loginUsername,
+        password: loginPassword,
+      });
+      setAccessToken(response.data.access_token);
+      setLoginPassword('');
+    } catch (error: any) {
+      setAuthError(error.response?.data?.detail || 'Unable to sign in.');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
   const sendMessage = async () => {
-    if (!input.trim() || loading) return;
+    if (!accessToken || !input.trim() || loading) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -71,7 +95,9 @@ const KaliGptClaude: React.FC = () => {
       const response = await axios.post(`${API_BASE_URL}/api/chat`, {
         message: input,
         context: securityContext,
-        history: messages.slice(-5), // Send last 5 messages for context
+        history: messages.filter((message) => message.role !== 'system').slice(-5), // Send only user and assistant turns
+      }, {
+        headers: { Authorization: `Bearer ${accessToken}` },
       });
 
       const assistantMessage: Message = {
@@ -83,12 +109,16 @@ const KaliGptClaude: React.FC = () => {
       };
 
       setMessages(prev => [...prev, assistantMessage]);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error sending message:', error);
+      if (error.response?.status === 401) {
+        setAccessToken(null);
+        setAuthError('Session expired. Sign in again.');
+      }
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'system',
-        content: 'Error: Unable to connect to backend. Please ensure the API server is running.',
+        content: error.response?.data?.detail || 'Unable to connect to the backend.',
         timestamp: new Date(),
       };
       setMessages(prev => [...prev, errorMessage]);
@@ -98,11 +128,15 @@ const KaliGptClaude: React.FC = () => {
   };
 
   const executeCommand = async (command: string) => {
+    if (!accessToken) return;
+
     setLoading(true);
     try {
       const response = await axios.post(`${API_BASE_URL}/api/execute`, {
         command,
         context: securityContext,
+      }, {
+        headers: { Authorization: `Bearer ${accessToken}` },
       });
 
       const resultMessage: Message = {
@@ -114,10 +148,14 @@ const KaliGptClaude: React.FC = () => {
 
       setMessages(prev => [...prev, resultMessage]);
     } catch (error: any) {
+      if (error.response?.status === 401) {
+        setAccessToken(null);
+        setAuthError('Session expired. Sign in again.');
+      }
       const errorMessage: Message = {
         id: Date.now().toString(),
         role: 'system',
-        content: `Error executing command: ${error.response?.data?.error || error.message}`,
+        content: `Error executing command: ${error.response?.data?.detail || error.response?.data?.error || error.message}`,
         timestamp: new Date(),
       };
       setMessages(prev => [...prev, errorMessage]);
@@ -161,6 +199,61 @@ const KaliGptClaude: React.FC = () => {
               {apiStatus === 'connected' ? 'Connected' : 'Disconnected'}
             </span>
           </div>
+        </div>
+
+        <div style={styles.authContainer}>
+          {accessToken ? (
+            <>
+              <span style={styles.statusText}>Authenticated</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setAccessToken(null);
+                  setAuthError('');
+                }}
+                style={styles.authButton}
+              >
+                Sign out
+              </button>
+            </>
+          ) : (
+            <form
+              style={styles.authForm}
+              onSubmit={(event) => {
+                event.preventDefault();
+                void login();
+              }}
+            >
+              <input
+                type="text"
+                autoComplete="username"
+                maxLength={50}
+                aria-label="Username"
+                placeholder="Username"
+                value={loginUsername}
+                onChange={(event) => setLoginUsername(event.target.value)}
+                style={styles.authInput}
+              />
+              <input
+                type="password"
+                autoComplete="current-password"
+                maxLength={128}
+                aria-label="Password"
+                placeholder="Password"
+                value={loginPassword}
+                onChange={(event) => setLoginPassword(event.target.value)}
+                style={styles.authInput}
+              />
+              <button
+                type="submit"
+                style={styles.authButton}
+                disabled={authLoading || !loginUsername.trim() || !loginPassword}
+              >
+                {authLoading ? 'Signing in...' : 'Sign in'}
+              </button>
+            </form>
+          )}
+          {authError && <span style={styles.authError}>{authError}</span>}
         </div>
         
         {/* Security Context */}
@@ -253,7 +346,7 @@ const KaliGptClaude: React.FC = () => {
                   <button
                     onClick={() => executeCommand(message.commandSuggestion!.command)}
                     style={styles.executeButton}
-                    disabled={loading}
+                    disabled={loading || !accessToken}
                   >
                     {loading ? 'Executing...' : 'Execute Command'}
                   </button>
@@ -280,18 +373,19 @@ const KaliGptClaude: React.FC = () => {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyPress={handleKeyPress}
-          placeholder="Ask about security testing, tools, or techniques..."
+          placeholder={accessToken ? 'Ask about security testing, tools, or techniques...' : 'Sign in to use KaliGPT'}
           style={styles.input}
           rows={3}
-          disabled={loading}
+          maxLength={4000}
+          disabled={loading || !accessToken}
         />
         <button
           onClick={sendMessage}
           style={{
             ...styles.sendButton,
-            ...(loading || !input.trim() ? styles.sendButtonDisabled : {})
+            ...(loading || !accessToken || !input.trim() ? styles.sendButtonDisabled : {})
           }}
-          disabled={loading || !input.trim()}
+          disabled={loading || !accessToken || !input.trim()}
         >
           {loading ? '⏳' : '🚀'} Send
         </button>
@@ -352,6 +446,41 @@ const styles: { [key: string]: React.CSSProperties } = {
   statusText: {
     fontSize: '0.875rem',
     color: '#9ca3af',
+  },
+  authContainer: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '0.75rem',
+    flexWrap: 'wrap',
+    marginBottom: '1rem',
+  },
+  authForm: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.5rem',
+    flexWrap: 'wrap',
+  },
+  authInput: {
+    padding: '0.5rem',
+    backgroundColor: '#2a2a2a',
+    border: '1px solid #3a3a3a',
+    borderRadius: '4px',
+    color: '#e5e5e5',
+    fontSize: '0.875rem',
+  },
+  authButton: {
+    padding: '0.5rem 0.75rem',
+    backgroundColor: '#00ff41',
+    color: '#0a0a0a',
+    border: 'none',
+    borderRadius: '4px',
+    fontWeight: 'bold',
+    cursor: 'pointer',
+  },
+  authError: {
+    color: '#ef4444',
+    fontSize: '0.875rem',
   },
   contextBar: {
     display: 'flex',
