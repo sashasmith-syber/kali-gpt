@@ -6,6 +6,7 @@ import os
 import requests
 import json
 import logging
+from datetime import datetime
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 
@@ -98,8 +99,13 @@ class OllamaProvider(LLMProvider):
                     )
 
         except requests.exceptions.RequestException as e:
-            logger.error(f"Ollama request failed: {e}")
-            return LLMResponse(content="", model=self.config.model, generated_at="", error=str(e))
+            logger.error("Ollama request failed (%s)", type(e).__name__)
+            return LLMResponse(
+                content="",
+                model=self.config.model,
+                generated_at="",
+                error="LLM provider request failed",
+            )
         except json.JSONDecodeError as e:
             logger.error(f"Failed to decode Ollama response: {e}")
             return LLMResponse(content="", model=self.config.model, generated_at="", error="Invalid JSON response")
@@ -139,8 +145,13 @@ class LMStudioProvider(LLMProvider):
             )
 
         except requests.exceptions.RequestException as e:
-            logger.error(f"LM Studio request failed: {e}")
-            return LLMResponse(content="", model=self.config.model, generated_at="", error=str(e))
+            logger.error("LM Studio request failed (%s)", type(e).__name__)
+            return LLMResponse(
+                content="",
+                model=self.config.model,
+                generated_at="",
+                error="LLM provider request failed",
+            )
         except (KeyError, IndexError) as e:
             logger.error(f"Invalid LM Studio response format: {e}")
             return LLMResponse(content="", model=self.config.model, generated_at="", error="Invalid response format")
@@ -179,12 +190,12 @@ class LLMService:
         try:
             return self.provider.generate(prompt, history)
         except Exception as e:
-            logger.error(f"Error during LLM generation: {e}", exc_info=True)
+            logger.error("Unexpected LLM generation failure (%s)", type(e).__name__)
             return LLMResponse(
                 content="An unexpected error occurred while communicating with the LLM.",
                 model=self.provider.config.model,
                 generated_at=datetime.now().isoformat(),
-                error=str(e)
+                error="LLM generation failed",
             )
 
 # Example usage (for testing)
