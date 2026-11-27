@@ -5,11 +5,13 @@ Implements JWT-based authentication with secure password hashing
 
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
-from jose import JWTError, jwt
+import jwt
+from jwt.exceptions import InvalidTokenError as JWTError
 from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status, Header
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, EmailStr, Field, validator
+import os
 import secrets
 import logging
 
@@ -25,7 +27,7 @@ REFRESH_TOKEN_EXPIRE_DAYS = 7
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # HTTP Bearer token scheme
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)
 
 
 # Models
@@ -72,8 +74,8 @@ class UserCreate(BaseModel):
 
 class UserLogin(BaseModel):
     """User login model"""
-    username: str
-    password: str
+    username: str = Field(..., min_length=3, max_length=50)
+    password: str = Field(..., min_length=1, max_length=128)
 
 
 class Token(BaseModel):
@@ -166,7 +168,7 @@ class TokenManager:
             return TokenData(username=username, role=role, exp=exp)
             
         except JWTError as e:
-            logger.error(f"Token verification failed: {str(e)}")
+            logger.warning("Token verification failed (%s)", type(e).__name__)
             return None
 
 
@@ -291,7 +293,7 @@ class APIKeyService:
 
 # Dependency functions
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
 ) -> UserInDB:
     """Get current authenticated user from JWT token"""
     credentials_exception = HTTPException(
@@ -299,7 +301,10 @@ async def get_current_user(
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
-    
+
+    if credentials is None:
+        raise credentials_exception
+
     token = credentials.credentials
     token_data = TokenManager.verify_token(token, token_type="access")
     
@@ -353,46 +358,27 @@ async def verify_api_key_header(x_api_key: Optional[str] = Header(None)) -> Opti
 
 
 def init_default_admin():
-    """Initialize default admin user with secure random password"""
-    if "admin" not in users_db:
-        # Generate secure random password
-        import secrets
-        import string
-        
-        # Generate a 16-character secure password
-        alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
-        default_password = ''.join(secrets.choice(alphabet) for _ in range(16))
-        
-        admin_user = UserInDB(
-            username="admin",
-            email="admin@kaligpt.local",
-            full_name="Administrator",
-            hashed_password=PasswordHasher.hash_password(default_password),
-            role="admin",
-            disabled=False,
-            # Track that password needs to be changed
-            metadata={"password_change_required": True}
+    """Initialize the default admin from a locally configured password."""
+    if "admin" in users_db:
+        return
+
+    admin_password = os.getenv("KALIGPT_ADMIN_PASSWORD", "")
+    if not admin_password:
+        logger.warning(
+            "Default admin was not initialized; set KALIGPT_ADMIN_PASSWORD "
+            "in the backend environment to enable login."
         )
-        users_db["admin"] = admin_user
-        
-        # Log the password securely - only show once at startup
-        logger.critical("=" * 70)
-        logger.critical("DEFAULT ADMIN USER CREATED - SECURE THIS IMMEDIATELY")
-        logger.critical("=" * 70)
-        logger.critical(f"Username: admin")
-        logger.critical(f"Password: {default_password}")
-        logger.critical("=" * 70)
-        logger.critical("⚠️  ACTION REQUIRED: Change this password after first login!")
-        logger.critical("⚠️  This password will NOT be shown again!")
-        logger.critical("=" * 70)
-        
-        # Also print to console for visibility
-        print("\n" + "=" * 70)
-        print("DEFAULT ADMIN USER CREATED - SECURE THIS IMMEDIATELY")
-        print("=" * 70)
-        print(f"Username: admin")
-        print(f"Password: {default_password}")
-        print("=" * 70)
-        print("⚠️  ACTION REQUIRED: Change this password after first login!")
-        print("⚠️  This password will NOT be shown again!")
-        print("=" * 70 + "\n")
+        return
+    if not 16 <= len(admin_password) <= 128:
+        raise ValueError("KALIGPT_ADMIN_PASSWORD must be between 16 and 128 characters")
+
+    admin_user = UserInDB(
+        username="admin",
+        email="admin@example.com",
+        full_name="Administrator",
+        hashed_password=PasswordHasher.hash_password(admin_password),
+        role="admin",
+        disabled=False,
+    )
+    users_db["admin"] = admin_user
+    logger.info("Default admin user initialized; password material was not logged.")
